@@ -28,6 +28,14 @@ describe('SEC-1 — fixtures are inert data, never installed or executed', () =>
     expect(config).toContain("include: ['tests/**/*.test.ts']");
   });
 
+  it('the unsupported fixture is inert data: no scripts of any kind', () => {
+    const fixturePkg = JSON.parse(
+      readFileSync(join(repoRoot, 'fixtures', 'unsupported', 'package.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    expect(fixturePkg['scripts']).toBeUndefined();
+    expect(fixturePkg['private']).toBe(true);
+  });
+
   it('the TypeScript project excludes fixtures', () => {
     const tsconfig = JSON.parse(readFileSync(join(repoRoot, 'tsconfig.json'), 'utf8')) as {
       exclude?: string[];

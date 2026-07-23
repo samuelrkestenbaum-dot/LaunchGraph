@@ -1,0 +1,10 @@
+{
+  "name": "plain-express-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Inert fixture data: a plain Express app (not Next.js/TypeScript). Never installed, never executed.",
+  "main": "index.js",
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
