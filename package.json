@@ -1,0 +1,19 @@
+{
+  "name": "launchgraph",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LaunchGraph Phase 1 Repository Auditor — proof surface (schemas, check registry, decision engine, fixture harness).",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}
