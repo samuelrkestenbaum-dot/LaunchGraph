@@ -1,0 +1,8 @@
+{
+  "_comment": "Seeds exactly LG-002: a live secret key (sk_live_EXAMPLEnotreal) is committed in lib/stripe.ts. Clean on LG-001 (https prod URL) and LG-004 (no webhook). The sk_test in .env.development is a valid-in-dev distractor. The emitted report must show the key redacted (AT-20 groundwork).",
+  "decision": "not_ready",
+  "exitCode": 1,
+  "findings": [
+    { "checkId": "LG-002", "outcome": "fail", "evidencePathContains": ["lib/stripe.ts"] }
+  ]
+}

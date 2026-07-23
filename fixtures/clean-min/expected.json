@@ -1,0 +1,6 @@
+{
+  "_comment": "SUBSET-SCOPED MANIFEST. This decision is 'ready' ONLY with respect to the three detectors implemented in P-003-S2 (LG-001/002/004); it is NOT a Phase-1 product verdict. The real §7 Phase-1 ceiling is 'ready_with_warnings' because LG-003/010/012/014/015 always carry pending external verification — those detectors arrive in later slices. Used here to prove blocker false-positives = 0 through the §9 harness.",
+  "decision": "ready",
+  "exitCode": 0,
+  "findings": []
+}

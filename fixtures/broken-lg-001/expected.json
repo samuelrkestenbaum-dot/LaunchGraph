@@ -1,0 +1,8 @@
+{
+  "_comment": "Seeds exactly LG-001: .env.production maps NEXT_PUBLIC_SITE_URL / NEXTAUTH_URL to http://localhost. Clean on LG-002 (no Stripe) and LG-004 (no webhook). The .env.development localhost is a distractor that must not trip LG-001.",
+  "decision": "not_ready",
+  "exitCode": 1,
+  "findings": [
+    { "checkId": "LG-001", "outcome": "fail", "evidencePathContains": [".env.production"] }
+  ]
+}

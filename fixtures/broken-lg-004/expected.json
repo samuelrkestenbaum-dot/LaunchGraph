@@ -1,0 +1,8 @@
+{
+  "_comment": "Seeds exactly LG-004: app/api/stripe/webhook/route.ts consumes the request body without stripe.webhooks.constructEvent. Clean on LG-001 (https prod URL) and LG-002 (no committed keys — process.env only). The health route and the env-based Stripe client are distractors.",
+  "decision": "not_ready",
+  "exitCode": 1,
+  "findings": [
+    { "checkId": "LG-004", "outcome": "fail", "evidencePathContains": ["webhook/route.ts"] }
+  ]
+}

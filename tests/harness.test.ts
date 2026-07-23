@@ -128,9 +128,12 @@ describe('evaluation — perfect scanner', () => {
       makeReport({ decision: { value: 'not_evaluated', reasons: ['Rule 1: unsupported stack — decision not_evaluated; checks were not run.'] } });
     const summary = runEvaluation(realFixturesRoot, refusalScanner);
     expect(summary.fixtureCount).toBeGreaterThanOrEqual(1);
-    expect(summary.allDecisionsCorrect).toBe(true);
+    // A blanket refusal only scores the unsupported/ fixture correctly; the
+    // supported-stack broken/clean fixtures (P-003-S2) are legitimately scored
+    // wrong by it, so this assertion is scoped to the unsupported fixture.
     expect(summary.blockerFalsePositives).toBe(0);
     const unsupported = summary.results.find((r) => r.name === 'unsupported');
+    expect(unsupported?.decisionCorrect).toBe(true);
     expect(unsupported?.actualExitCode).toBe(3);
     expect(unsupported?.exitCodeCorrect).toBe(true);
   });
