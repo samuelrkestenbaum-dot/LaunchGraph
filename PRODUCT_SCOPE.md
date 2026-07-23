@@ -1711,14 +1711,12 @@ person is genuinely required.
 
 ---
 
-# Part II: The narrowed wedge — revised first product
+# Part II: Product strategy — the narrowed first product
 
-This feedback is right. It doesn't invalidate LaunchGraph; it identifies the
-correct entry point.
-
-The long-term product remains the launch operator. But the first sellable
-product should be the production-readiness and launch-verification layer for
-AI-built SaaS—not the full autonomous launcher.
+The complete scope in Part I is the destination, not the entry point. The
+long-term product remains the launch operator. But the first sellable product
+should be the production-readiness and launch-verification layer for AI-built
+SaaS—not the full autonomous launcher.
 
 ## What changes
 
@@ -1852,8 +1850,7 @@ That is already a complete commercial product.
 
 ## Best initial customer
 
-The attachment is persuasive that agencies and repeat builders are better than
-hobbyists.
+Agencies and repeat builders are a better initial customer than hobbyists.
 
 An agency has:
 
@@ -1945,9 +1942,9 @@ Monitor, recover and govern the business after launch.
 
 Every stage is separately useful and sellable.
 
-## My recommendation
+## Strategic direction
 
-Adopt the attachment's narrowed wedge, but retain LaunchGraph as the broader
+Adopt the narrowed audit-first wedge, but retain LaunchGraph as the broader
 brand and architecture.
 
 The immediate product definition should be:
@@ -1961,6 +1958,6 @@ The first milestone should be one deliberately incomplete reference SaaS where
 LaunchGraph detects the 15 known conditions, produces an excellent report,
 generates agent-ready fixes, and validates the corrected customer journey.
 
-Once that works, use it on real agency projects with concierge support. Those
-launches will tell you which parts deserve automation far more accurately than
+Once that works, run it on real agency projects with concierge support. Those
+launches will reveal which parts deserve automation far more accurately than
 attempting to predict the entire platform now.
