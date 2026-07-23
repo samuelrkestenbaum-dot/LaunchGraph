@@ -17,9 +17,17 @@ asking the person only when human authority is genuinely required.
   adapters, environment separation, rollback, cost governance, ownership,
   verification, commercial model, implementation phases, and the narrowed
   first-product wedge (LaunchGraph Production Readiness).
+* [Phase 1 Specification: Repository Auditor](specs/phase-1-repository-auditor.md) —
+  the read-only MVP: supported stack, the 15 readiness checks, deterministic
+  versus model-assisted detection, finding and evidence schemas,
+  readiness-decision rules, remediation-package format, fixtures and
+  evaluation, security requirements, CLI experience, acceptance tests, and
+  explicitly deferred functionality.
 
 ## Status
 
-Pre-implementation. The current milestone is the scope in
-[PRODUCT_SCOPE.md](PRODUCT_SCOPE.md); the first buildable target is the
-production-readiness and launch-verification layer described in Part II.
+Pre-implementation. The scope lives in
+[PRODUCT_SCOPE.md](PRODUCT_SCOPE.md); the next milestone is Phase 1
+(Repository Auditor), specified in
+[specs/phase-1-repository-auditor.md](specs/phase-1-repository-auditor.md).
+Phase 1 implementation awaits explicit go.
