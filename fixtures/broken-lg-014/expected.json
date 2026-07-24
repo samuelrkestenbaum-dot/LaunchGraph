@@ -1,0 +1,8 @@
+{
+  "_comment": "Seeds exactly LG-014 (WARNING ceiling): sentry.server.config.ts installs and initializes the Sentry SDK but wires NO production DSN and NO environment/release tagging. The LG-014 fail carries severity 'warning' (never blocker) and a documentary externalVerification{sentry}; whether errors actually arrive in the production Sentry project is external (Phase 3). Warning-only → decision ready_with_warnings, exit 0 (NOT not_ready). Clean elsewhere: LG-001 (https prod URL) pass, LG-002/003/004 (no Stripe/webhook) n/a, LG-008 (no DB) n/a, LG-010 (no Resend) n/a, LG-015 (single canonical host) pass-unverified. No DSN literal is present. Zero blocker false positives.",
+  "decision": "ready_with_warnings",
+  "exitCode": 0,
+  "findings": [
+    { "checkId": "LG-014", "outcome": "fail", "evidencePathContains": ["sentry.server.config"] }
+  ]
+}

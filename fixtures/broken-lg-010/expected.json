@@ -1,0 +1,8 @@
+{
+  "_comment": "Seeds exactly LG-010 (WARNING ceiling): lib/email.ts sends transactional email from the Resend provider-default domain onboarding@resend.dev. The LG-010 fail carries severity 'warning' (never blocker) and a documentary externalVerification{resend}; whether a sending domain is authenticated (SPF/DKIM/DMARC) is external (Phase 3). Warning-only → decision ready_with_warnings, exit 0 (NOT not_ready). Clean elsewhere: LG-001 (https prod URL) pass, LG-002 (env-based client, no committed key) n/a, LG-003/004 (no Stripe/webhook) n/a, LG-008 (no DB) n/a, LG-014 (no Sentry) n/a, LG-015 (single canonical host) pass-unverified. Zero blocker false positives.",
+  "decision": "ready_with_warnings",
+  "exitCode": 0,
+  "findings": [
+    { "checkId": "LG-010", "outcome": "fail", "evidencePathContains": ["email"] }
+  ]
+}
