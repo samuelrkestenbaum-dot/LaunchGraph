@@ -48,6 +48,15 @@ export const LAUNCHGRAPH_VERSION = '0.1.0';
 export interface ScannerOptions {
   /** Injectable clock for `scannedAt`; defaults to the real clock. */
   now?: () => Date;
+  /**
+   * §11 `--checks` subset: when present, only findings whose `checkId` is in
+   * this list feed the decision. When undefined (every current caller) NO
+   * filtering happens and behavior is byte-identical. The filter runs BEFORE
+   * `decide`, and never touches the stack-supported short-circuit — an
+   * unsupported stack still resolves to `not_evaluated` regardless of `--checks`
+   * (AT-24 preserved).
+   */
+  checks?: readonly string[];
 }
 
 const NEXT_DEP_RE = /"next"\s*:/;
@@ -138,6 +147,7 @@ function detectStack(fileset: Fileset): StackDetection {
  */
 export function createScanner(options: ScannerOptions = {}): (fixtureDir: string) => Report {
   const now = options.now ?? ((): Date => new Date());
+  const checks = options.checks;
   return (fixtureDir: string): Report => {
     const fileset = collect(fixtureDir);
     const { supported, stack, facts } = detectStack(fileset);
@@ -153,7 +163,12 @@ export function createScanner(options: ScannerOptions = {}): (fixtureDir: string
       ...detectLg015(fileset),
     ];
 
-    const decision = decide({ findings: rawFindings, stackSupported: supported });
+    // §11 `--checks`: filter to the requested subset before deciding. Undefined
+    // means "run everything" — identical to the pre-existing behavior.
+    const selectedFindings =
+      checks === undefined ? rawFindings : rawFindings.filter((f) => checks.includes(f.checkId));
+
+    const decision = decide({ findings: selectedFindings, stackSupported: supported });
 
     return {
       schemaVersion: SCHEMA_VERSION,
