@@ -1,6 +1,6 @@
 {
-  "_comment": "SUBSET-SCOPED MANIFEST. This decision is 'ready' ONLY with respect to the three detectors implemented in P-003-S2 (LG-001/002/004); it is NOT a Phase-1 product verdict. The real §7 Phase-1 ceiling is 'ready_with_warnings' because LG-003/010/012/014/015 always carry pending external verification — those detectors arrive in later slices. Used here to prove blocker false-positives = 0 through the §9 harness.",
-  "decision": "ready",
+  "_comment": "SUBSET-SCOPED MANIFEST. As of P-003-S3 this fixture's decision is 'ready_with_warnings', not 'ready': LG-015 now emits a pass-unverified finding carrying externalVerification (this Next app configures a single consistent https production host, but DNS/TLS/deployment attachment are external), which correctly holds the Phase-1 ceiling (§7 rule 6). Zero blockers remain (blocker false-positives = 0). This is the pre-documented ceiling transition from P-003-S2, not new scope — it is still subset-scoped (LG-005/006/007/009/010/011/012/013/014 arrive in later slices) and is NOT the AT-16 golden fixture.",
+  "decision": "ready_with_warnings",
   "exitCode": 0,
   "findings": []
 }

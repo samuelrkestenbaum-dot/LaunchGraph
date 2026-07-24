@@ -1,0 +1,8 @@
+{
+  "_comment": "Seeds exactly LG-015: a Next app with NO canonical production URL configured anywhere. LG-001 is 'unknown' (no production URL mapping), so LG-015 is the only blocker. The .env.development localhost is a distractor LG-015 must ignore. The LG-015 fail carries a documentary externalVerification{dns}; DNS/TLS/attachment are external (Phase 3).",
+  "decision": "not_ready",
+  "exitCode": 1,
+  "findings": [
+    { "checkId": "LG-015", "outcome": "fail", "evidencePathContains": [".env.production"] }
+  ]
+}

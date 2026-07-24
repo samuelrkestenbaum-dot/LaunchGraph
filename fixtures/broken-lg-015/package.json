@@ -1,0 +1,11 @@
+{
+  "name": "broken-lg-015-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Inert fixture data: seeds LG-015 (no canonical production domain configured). Never installed, built, or executed (SEC-1).",
+  "dependencies": {
+    "next": "14.2.3",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
+}

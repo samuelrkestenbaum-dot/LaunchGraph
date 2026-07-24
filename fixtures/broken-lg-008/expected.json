@@ -1,0 +1,8 @@
+{
+  "_comment": "Seeds exactly LG-008: the identical DATABASE_URL value is committed under both .env.production and .env.preview, so preview deployments use the production database. Repo-provable -> confirmed -> NO externalVerification. Clean on LG-001 (https prod URL), LG-002 (no Stripe), LG-003 (no subscription usage), LG-004 (no webhook), LG-015 (pass-unverified). The fake DB URL uses a short <20-alnum suffix.",
+  "decision": "not_ready",
+  "exitCode": 1,
+  "findings": [
+    { "checkId": "LG-008", "outcome": "fail", "evidencePathContains": [".env.production"] }
+  ]
+}
