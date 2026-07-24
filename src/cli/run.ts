@@ -27,7 +27,8 @@ import { fileURLToPath } from 'node:url';
 import { serializeReport } from '../report/serialize.js';
 import { exitCodeForDecision, runEvaluation, SCAN_ERROR_EXIT_CODE } from '../eval/harness.js';
 import type { EvalSummary } from '../eval/harness.js';
-import { createScanner } from '../scan/scanner.js';
+import type { ModelClient } from '../model/client.js';
+import { createScanner, scanWithModel } from '../scan/scanner.js';
 import type { Report } from '../schema/index.js';
 import { parseArgs } from './args.js';
 import type { CliFlags } from './args.js';
@@ -52,7 +53,33 @@ function resolveScanTarget(io: Io, path: string, flags: CliFlags): string {
   return flags.app !== undefined ? resolve(base, flags.app) : base;
 }
 
-/** Runs the `scan` command and returns its exit code. */
+/**
+ * Emits a completed report and returns the exit code. Shared by the sync and
+ * online scan paths so their output behavior is identical: `--json` writes the
+ * canonical report to stdout (no files); default mode writes report.json +
+ * report.md into the output directory (--out, else `<target>/.launchgraph`) and
+ * prints the banner. Writes are confined to the output directory (SEC-6); the
+ * renderers consume only already-redacted evidence (SEC-4).
+ */
+function emitReport(report: Report, target: string, flags: CliFlags, io: Io): number {
+  const exitCode = exitCodeForDecision(report.decision.value);
+
+  if (flags.json) {
+    io.stdout(serializeReport(report));
+    return exitCode;
+  }
+
+  const outDir = flags.out !== undefined ? resolve(io.cwd(), flags.out) : join(target, '.launchgraph');
+  const reportJsonPath = join(outDir, 'report.json');
+  const reportMdPath = join(outDir, 'report.md');
+  io.writeFile(reportJsonPath, serializeReport(report));
+  io.writeFile(reportMdPath, renderReportMd(report));
+  io.stdout(renderBanner(report));
+  io.stdout(`\nReport: ${reportMdPath} · ${reportJsonPath}\n`);
+  return exitCode;
+}
+
+/** Runs the deterministic (sync, model-less) `scan` and returns its exit code. */
 function runScan(target: string, flags: CliFlags, io: Io): number {
   let report: Report;
   try {
@@ -63,28 +90,19 @@ function runScan(target: string, flags: CliFlags, io: Io): number {
     io.stderr(`launchgraph: scan failed: ${error instanceof Error ? error.message : String(error)}\n`);
     return SCAN_ERROR_EXIT_CODE;
   }
+  return emitReport(report, target, flags, io);
+}
 
-  const exitCode = exitCodeForDecision(report.decision.value);
-
-  if (flags.json) {
-    // --json: canonical report to stdout only (includes its trailing newline);
-    // no files are written.
-    io.stdout(serializeReport(report));
-    return exitCode;
+/** Runs the online `scan` (model layer enabled) and returns its exit code. */
+async function runScanOnline(target: string, flags: CliFlags, io: Io, model: ModelClient): Promise<number> {
+  let report: Report;
+  try {
+    report = await scanWithModel(target, model, { now: () => io.now(), checks: flags.checks });
+  } catch (error) {
+    io.stderr(`launchgraph: scan failed: ${error instanceof Error ? error.message : String(error)}\n`);
+    return SCAN_ERROR_EXIT_CODE;
   }
-
-  // Default mode: write report.json + report.md into the output directory
-  // (--out, else <target>/.launchgraph) and print the banner. Writes are
-  // confined to the output directory (SEC-6). The renderers consume only the
-  // already-redacted evidence on the report (SEC-4).
-  const outDir = flags.out !== undefined ? resolve(io.cwd(), flags.out) : join(target, '.launchgraph');
-  const reportJsonPath = join(outDir, 'report.json');
-  const reportMdPath = join(outDir, 'report.md');
-  io.writeFile(reportJsonPath, serializeReport(report));
-  io.writeFile(reportMdPath, renderReportMd(report));
-  io.stdout(renderBanner(report));
-  io.stdout(`\nReport: ${reportMdPath} · ${reportJsonPath}\n`);
-  return exitCode;
+  return emitReport(report, target, flags, io);
 }
 
 /** Formats the §9.2 evaluation summary for the terminal (deterministic). */
@@ -113,19 +131,36 @@ function runEval(io: Io): number {
 }
 
 /**
- * Entry point: parse argv and dispatch. Pure and synchronous — all effects go
- * through `io`. Returns the process exit code.
+ * Entry point: parse argv and dispatch. All effects go through `io`.
+ *
+ * Two-arg `run(argv, io)` is the pure, SYNCHRONOUS core (unchanged): no model,
+ * so `scan` runs the deterministic path (LG-006 `unknown`, AT-27). The bin uses
+ * the three-arg `run(argv, io, model)` overload — returning a `Promise` — only
+ * when a model endpoint is configured; even then, `--offline` still routes to
+ * the sync path (the sole async branch is a configured, non-offline `scan`).
  */
-export function run(argv: string[], io: Io): number {
+export function run(argv: string[], io: Io): number;
+export function run(argv: string[], io: Io, model: ModelClient): Promise<number>;
+export function run(argv: string[], io: Io, model?: ModelClient): number | Promise<number> {
   const parsed = parseArgs(argv);
   if ('error' in parsed) {
     io.stderr(`launchgraph: ${parsed.error}\n`);
-    return SCAN_ERROR_EXIT_CODE;
+    return model !== undefined ? Promise.resolve(SCAN_ERROR_EXIT_CODE) : SCAN_ERROR_EXIT_CODE;
   }
 
-  if (parsed.command === 'scan') {
-    return runScan(resolveScanTarget(io, parsed.path, parsed.flags), parsed.flags, io);
+  if (parsed.command === 'eval') {
+    const code = runEval(io);
+    return model !== undefined ? Promise.resolve(code) : code;
   }
 
-  return runEval(io);
+  const target = resolveScanTarget(io, parsed.path, parsed.flags);
+  if (model === undefined) {
+    return runScan(target, parsed.flags, io);
+  }
+  if (parsed.flags.offline) {
+    // Model configured but --offline: honor offline — deterministic path only,
+    // zero egress. Promise-wrapped to satisfy the online overload's contract.
+    return Promise.resolve(runScan(target, parsed.flags, io));
+  }
+  return runScanOnline(target, parsed.flags, io, model);
 }

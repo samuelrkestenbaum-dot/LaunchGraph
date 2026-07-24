@@ -37,7 +37,9 @@ import { detectLg008 } from '../checks/lg008.js';
 import { detectLg010 } from '../checks/lg010.js';
 import { detectLg014 } from '../checks/lg014.js';
 import { detectLg015 } from '../checks/lg015.js';
+import { interpretLg006, surfaceLg006Candidates } from '../checks/lg006.js';
 import { basename } from '../checks/detectorKit.js';
+import type { ModelClient } from '../model/client.js';
 import { collect } from './collect.js';
 import type { Fileset } from './collect.js';
 import { buildEvidence } from './redact.js';
@@ -141,9 +143,63 @@ function detectStack(fileset: Fileset): StackDetection {
   return { supported, stack, facts };
 }
 
+/** The eight deterministic (Layer D) detectors, in fixed order. */
+function deterministicFindings(fileset: Fileset): Finding[] {
+  return [
+    ...detectLg001(fileset),
+    ...detectLg002(fileset),
+    ...detectLg003(fileset),
+    ...detectLg004(fileset),
+    ...detectLg008(fileset),
+    ...detectLg010(fileset),
+    ...detectLg014(fileset),
+    ...detectLg015(fileset),
+  ];
+}
+
 /**
- * Builds a `ScannerFn`. Wiring, not logic: it never invents findings or
- * decisions — detectors and `decide` do that.
+ * Assembles the §5 Report from computed findings. Shared by the sync scanner
+ * and the async online composition, so the two paths produce byte-identical
+ * report STRUCTURE and run the SAME pure `decide` — they differ only in how
+ * LG-006's single finding was produced (offline `unknown` vs model-inferred).
+ */
+function assembleReport(
+  fileset: Fileset,
+  stack: Report['stack'],
+  facts: Fact[],
+  supported: boolean,
+  rawFindings: Finding[],
+  now: () => Date,
+  checks: readonly string[] | undefined,
+): Report {
+  // §11 `--checks`: filter to the requested subset before deciding. Undefined
+  // means "run everything" — identical to the pre-existing behavior.
+  const selectedFindings =
+    checks === undefined ? rawFindings : rawFindings.filter((f) => checks.includes(f.checkId));
+
+  const decision = decide({ findings: selectedFindings, stackSupported: supported });
+
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    launchgraphVersion: LAUNCHGRAPH_VERSION,
+    scannedAt: now().toISOString(),
+    repo: { root: fileset.root, commit: null, dirty: false },
+    stack,
+    product: { inferredModel: 'unknown', confidence: 0, evidence: [] },
+    facts,
+    findings: decision.findings,
+    decision: { value: decision.value, reasons: decision.reasons },
+    counts: decision.counts,
+  };
+}
+
+/**
+ * Builds a synchronous `ScannerFn`. Wiring, not logic: it never invents findings
+ * or decisions — detectors and `decide` do that. LG-006 runs its deterministic
+ * Layer-D surface and, with NO model judgment available in this path, emits
+ * `unknown` ("model layer disabled") when a webhook handler exists (or
+ * `not_applicable` when none does). This IS the --offline / model-unconfigured /
+ * AT-27 behavior; the sync path stays synchronous and calls no model.
  */
 export function createScanner(options: ScannerOptions = {}): (fixtureDir: string) => Report {
   const now = options.now ?? ((): Date => new Date());
@@ -151,38 +207,31 @@ export function createScanner(options: ScannerOptions = {}): (fixtureDir: string
   return (fixtureDir: string): Report => {
     const fileset = collect(fixtureDir);
     const { supported, stack, facts } = detectStack(fileset);
-
-    const rawFindings: Finding[] = [
-      ...detectLg001(fileset),
-      ...detectLg002(fileset),
-      ...detectLg003(fileset),
-      ...detectLg004(fileset),
-      ...detectLg008(fileset),
-      ...detectLg010(fileset),
-      ...detectLg014(fileset),
-      ...detectLg015(fileset),
-    ];
-
-    // §11 `--checks`: filter to the requested subset before deciding. Undefined
-    // means "run everything" — identical to the pre-existing behavior.
-    const selectedFindings =
-      checks === undefined ? rawFindings : rawFindings.filter((f) => checks.includes(f.checkId));
-
-    const decision = decide({ findings: selectedFindings, stackSupported: supported });
-
-    return {
-      schemaVersion: SCHEMA_VERSION,
-      launchgraphVersion: LAUNCHGRAPH_VERSION,
-      scannedAt: now().toISOString(),
-      repo: { root: fileset.root, commit: null, dirty: false },
-      stack,
-      product: { inferredModel: 'unknown', confidence: 0, evidence: [] },
-      facts,
-      findings: decision.findings,
-      decision: { value: decision.value, reasons: decision.reasons },
-      counts: decision.counts,
-    };
+    const rawFindings = [...deterministicFindings(fileset), ...interpretLg006(surfaceLg006Candidates(fileset))];
+    return assembleReport(fileset, stack, facts, supported, rawFindings, now, checks);
   };
+}
+
+/**
+ * Async online composition (§4.2). Runs the SAME deterministic surface as the
+ * sync scanner, then calls the injected model over LG-006's surfaced (already
+ * secret-redacted) excerpts and rebuilds the LG-006 finding via the D→M
+ * contract. The Layer-D findings are byte-identical to the offline path, and it
+ * calls the SAME pure `decide`. Async touches ONLY this composition — the sync
+ * path above never awaits and never sees a model. `--offline` and the no-model
+ * default route to `createScanner`, not here.
+ */
+export async function scanWithModel(dir: string, model: ModelClient, options: ScannerOptions = {}): Promise<Report> {
+  const now = options.now ?? ((): Date => new Date());
+  const checks = options.checks;
+  const fileset = collect(dir);
+  const { supported, stack, facts } = detectStack(fileset);
+  const candidates = surfaceLg006Candidates(fileset);
+  const lg006Findings = candidates.applicable
+    ? interpretLg006(candidates, await model.infer(candidates.request))
+    : interpretLg006(candidates);
+  const rawFindings = [...deterministicFindings(fileset), ...lg006Findings];
+  return assembleReport(fileset, stack, facts, supported, rawFindings, now, checks);
 }
 
 /** Default scanner using the real clock. */
