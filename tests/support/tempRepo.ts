@@ -22,7 +22,7 @@ const created: string[] = [];
 
 /** Writes `files` (repo-relative path → contents) into a fresh temp repo. */
 export function makeRepo(files: Record<string, string>): TempRepo {
-  const root = mkdtempSync(join(tmpdir(), 'launchgraph-repo-'));
+  const root = mkdtempSync(join(tmpdir(), 'sugarbee-repo-'));
   created.push(root);
   for (const [rel, content] of Object.entries(files)) {
     const abs = join(root, rel);

@@ -153,7 +153,7 @@ export function renderReportMd(report: Report): string {
       : report.stack.map((s) => `${s.provider} (${s.support})`).join(' · ');
 
   const sections: string[] = [
-    `# LaunchGraph scan — ${heading}`,
+    `# SugarBee.ai scan — ${heading}`,
     '',
     `- Scanned at: ${report.scannedAt}`,
     `- Decision: **${decisionLabel(report.decision.value)}**`,

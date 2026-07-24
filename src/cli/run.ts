@@ -57,7 +57,7 @@ function resolveScanTarget(io: Io, path: string, flags: CliFlags): string {
  * Emits a completed report and returns the exit code. Shared by the sync and
  * online scan paths so their output behavior is identical: `--json` writes the
  * canonical report to stdout (no files); default mode writes report.json +
- * report.md into the output directory (--out, else `<target>/.launchgraph`) and
+ * report.md into the output directory (--out, else `<target>/.sugarbee`) and
  * prints the banner. Writes are confined to the output directory (SEC-6); the
  * renderers consume only already-redacted evidence (SEC-4).
  */
@@ -69,7 +69,7 @@ function emitReport(report: Report, target: string, flags: CliFlags, io: Io): nu
     return exitCode;
   }
 
-  const outDir = flags.out !== undefined ? resolve(io.cwd(), flags.out) : join(target, '.launchgraph');
+  const outDir = flags.out !== undefined ? resolve(io.cwd(), flags.out) : join(target, '.sugarbee');
   const reportJsonPath = join(outDir, 'report.json');
   const reportMdPath = join(outDir, 'report.md');
   io.writeFile(reportJsonPath, serializeReport(report));
@@ -87,7 +87,7 @@ function runScan(target: string, flags: CliFlags, io: Io): number {
     // scanner runs every detector, byte-identically to a bare createScanner.
     report = createScanner({ now: () => io.now(), checks: flags.checks })(target);
   } catch (error) {
-    io.stderr(`launchgraph: scan failed: ${error instanceof Error ? error.message : String(error)}\n`);
+    io.stderr(`sugarbee: scan failed: ${error instanceof Error ? error.message : String(error)}\n`);
     return SCAN_ERROR_EXIT_CODE;
   }
   return emitReport(report, target, flags, io);
@@ -99,7 +99,7 @@ async function runScanOnline(target: string, flags: CliFlags, io: Io, model: Mod
   try {
     report = await scanWithModel(target, model, { now: () => io.now(), checks: flags.checks });
   } catch (error) {
-    io.stderr(`launchgraph: scan failed: ${error instanceof Error ? error.message : String(error)}\n`);
+    io.stderr(`sugarbee: scan failed: ${error instanceof Error ? error.message : String(error)}\n`);
     return SCAN_ERROR_EXIT_CODE;
   }
   return emitReport(report, target, flags, io);
@@ -107,7 +107,7 @@ async function runScanOnline(target: string, flags: CliFlags, io: Io, model: Mod
 
 /** Formats the §9.2 evaluation summary for the terminal (deterministic). */
 function renderEvalSummary(summary: EvalSummary): string {
-  const lines: string[] = [`launchgraph eval — ${summary.fixtureCount} fixture(s)`, ''];
+  const lines: string[] = [`sugarbee eval — ${summary.fixtureCount} fixture(s)`, ''];
   for (const r of summary.results) {
     const tag = r.decisionCorrect && r.exitCodeCorrect && r.reportValid ? 'OK' : 'XX';
     const actual = r.actualDecision ?? `scan error: ${r.scanError ?? 'unknown'}`;
@@ -144,7 +144,7 @@ export function run(argv: string[], io: Io, model: ModelClient): Promise<number>
 export function run(argv: string[], io: Io, model?: ModelClient): number | Promise<number> {
   const parsed = parseArgs(argv);
   if ('error' in parsed) {
-    io.stderr(`launchgraph: ${parsed.error}\n`);
+    io.stderr(`sugarbee: ${parsed.error}\n`);
     return model !== undefined ? Promise.resolve(SCAN_ERROR_EXIT_CODE) : SCAN_ERROR_EXIT_CODE;
   }
 

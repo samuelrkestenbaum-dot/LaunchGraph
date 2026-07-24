@@ -1,7 +1,7 @@
 /**
  * Real model transport skeleton (real runtime only — NEVER imported by a test).
  *
- * At real runtime the bin (`bin/launchgraph.ts`) constructs this with the model
+ * At real runtime the bin (`bin/sugarbee.ts`) constructs this with the model
  * endpoint config it reads from the host — the credential boundary, mirroring
  * `realIo`. This class itself:
  * - reads NO `process.env` (config is injected via the constructor),

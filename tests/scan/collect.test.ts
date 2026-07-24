@@ -13,7 +13,7 @@ afterAll(() => {
 });
 
 function makeTempDir(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'launchgraph-collect-'));
+  const dir = mkdtempSync(join(tmpdir(), 'sugarbee-collect-'));
   tempDirs.push(dir);
   return dir;
 }

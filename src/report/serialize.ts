@@ -91,7 +91,7 @@ function canonicalFinding(finding: Finding): Record<string, unknown> {
 function canonicalReport(report: Report): Record<string, unknown> {
   return {
     schemaVersion: report.schemaVersion,
-    launchgraphVersion: report.launchgraphVersion,
+    sugarbeeVersion: report.sugarbeeVersion,
     scannedAt: report.scannedAt,
     repo: { root: report.repo.root, commit: report.repo.commit, dirty: report.repo.dirty },
     stack: report.stack.map((entry) => ({

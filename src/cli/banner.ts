@@ -44,7 +44,7 @@ export function renderBanner(report: Report): string {
   const name = baseName(report.repo.root);
   const heading = report.repo.commit !== null ? `${name} @ ${report.repo.commit}` : name;
 
-  const lines: string[] = [`LaunchGraph scan — ${heading}`, ''];
+  const lines: string[] = [`SugarBee.ai scan — ${heading}`, ''];
 
   const stack =
     report.stack.length === 0 ? 'none detected' : report.stack.map((s) => s.provider).join(' · ');

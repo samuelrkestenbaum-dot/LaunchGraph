@@ -48,7 +48,7 @@ export function makeFinding(overrides: Partial<Finding> = {}): Finding {
 export function makeReport(overrides: Partial<Report> = {}): Report {
   return {
     schemaVersion: SCHEMA_VERSION,
-    launchgraphVersion: '0.1.0',
+    sugarbeeVersion: '0.1.0',
     scannedAt: '2026-07-23T00:00:00.000Z',
     repo: { root: '/repo', commit: '5621aa9e691dcc40860b09be6ee2ef30ed345b57', dirty: false },
     stack: [],

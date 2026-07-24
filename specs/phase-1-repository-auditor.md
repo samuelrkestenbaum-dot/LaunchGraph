@@ -1,4 +1,4 @@
-# LaunchGraph Phase 1 Specification: Repository Auditor
+# SugarBee.ai Phase 1 Specification: Repository Auditor
 
 - **Status:** Specification — approved scope, not yet implemented.
   Implementation awaits explicit go.
@@ -10,7 +10,7 @@
 
 Phase 1 exists to prove exactly one claim exceptionally well:
 
-> LaunchGraph can inspect an AI-built SaaS repository and accurately identify
+> SugarBee.ai can inspect an AI-built SaaS repository and accurately identify
 > the consequential conditions preventing a safe production launch.
 
 Everything in this specification serves that claim. Anything that does not is
@@ -22,7 +22,7 @@ deferred (§13).
 
 ### 1.1 What Phase 1 is
 
-A local CLI, `launchgraph`, that:
+A local CLI, `sugarbee`, that:
 
 1. Scans a local TypeScript/Next.js repository on disk.
 2. Detects which golden-path providers the repository uses.
@@ -63,7 +63,7 @@ Hard exclusions (restated from the packet mandate; full list in §13):
   clients are instantiated, no credentials are read from the environment,
   and the only permitted network egress is the configured model API (§10).
 - **The scanned repository is untrusted input** and is never executed (§10).
-- **Output is confined** to the `.launchgraph/` directory inside the scanned
+- **Output is confined** to the `.sugarbee/` directory inside the scanned
   repository (or an explicit `--out` directory).
 
 ## 2. Supported repository and stack
@@ -326,7 +326,7 @@ interface Finding {
 
 interface Report {
   schemaVersion: string;
-  launchgraphVersion: string;
+  sugarbeeVersion: string;
   scannedAt: string;       // ISO 8601
   repo: { root: string; commit: string | null; dirty: boolean };
   stack: Array<{ provider: string; signals: string[]; support: SupportLevel }>;
@@ -355,7 +355,7 @@ searched; no `excerpt` may contain an unredacted secret.
 - External-dependent conclusions → `unverified`, regardless of layer.
 - Deterministic/model disagreement → `contradictory`.
 - Blocker-severity `inferred` findings with confidence < 0.7 are downgraded
-  to `requires_confirmation` (§7) — LaunchGraph does not block a launch on a
+  to `requires_confirmation` (§7) — SugarBee.ai does not block a launch on a
   low-confidence guess, and does not hide the uncertainty either.
 
 ### 6.2 Confidence bands (for the human report)
@@ -407,7 +407,7 @@ instead). Packages are plain markdown with YAML front matter — readable by a
 human, parseable by tooling, and containing no agent-specific syntax so the
 same package drives Claude Code or Codex unchanged.
 
-Location: `.launchgraph/remediation/<finding-id>-<slug>.md`
+Location: `.sugarbee/remediation/<finding-id>-<slug>.md`
 
 ```markdown
 ---
@@ -489,7 +489,7 @@ check ID, expected outcomes, expected evidence paths).
 
 ### 9.2 Evaluation harness
 
-`launchgraph eval` runs the scanner across all fixtures and diffs results
+`sugarbee eval` runs the scanner across all fixtures and diffs results
 against ground truth, reporting per-check precision and recall, blocker
 false positives on `golden/`, decision correctness, and evidence-path
 accuracy (a finding only counts as correct if it cites an expected file).
@@ -537,7 +537,7 @@ numbered for traceability to acceptance tests.
 - **SEC-6 — Filesystem containment.** Symlinks are not followed outside the
   repo root; path traversal is rejected; binary files are skipped; per-file
   (2 MB) and per-repo (50k files) limits with a scan timeout. Writes are
-  confined to `.launchgraph/` (or `--out`).
+  confined to `.sugarbee/` (or `--out`).
 - **SEC-7 — Honest degradation.** Any security limit that truncates coverage
   (skipped files, timeouts) is reported in the scan output — silent
   truncation is treated as a defect.
@@ -547,13 +547,13 @@ numbered for traceability to acceptance tests.
 ### 11.1 Commands and flags
 
 ```
-launchgraph scan [path]
+sugarbee scan [path]
   --json            emit JSON report to stdout
-  --out <dir>       output directory (default: <repo>/.launchgraph/)
+  --out <dir>       output directory (default: <repo>/.sugarbee/)
   --offline         deterministic layer only; no network at all
   --checks <ids>    run a subset (e.g. LG-001,LG-004)
   --app <path>      select the app in a monorepo
-launchgraph eval    run the fixture evaluation harness (repo development)
+sugarbee eval    run the fixture evaluation harness (repo development)
 ```
 
 ### 11.2 Terminal experience
@@ -563,7 +563,7 @@ evidence path and classification qualifier, external verifications and
 "needs your confirmation" items in their own sections. Abbreviated example:
 
 ```
-LaunchGraph scan — my-saas @ 4f2a91c
+SugarBee.ai scan — my-saas @ 4f2a91c
 
 Stack: Next.js · Vercel · Supabase · Stripe · Resend · PostHog · Sentry
 Inferred product: B2B subscription SaaS (high confidence)
@@ -576,8 +576,8 @@ BLOCKER  LG-004  Webhook consumed without signature verification
          src/app/api/stripe/webhook/route.ts:9   (confirmed)
 ...
 
-Remediation packages: .launchgraph/remediation/ (3 packages)
-Report: .launchgraph/report.md · .launchgraph/report.json
+Remediation packages: .sugarbee/remediation/ (3 packages)
+Report: .sugarbee/report.md · .sugarbee/report.json
 ```
 
 ### 11.3 Outputs

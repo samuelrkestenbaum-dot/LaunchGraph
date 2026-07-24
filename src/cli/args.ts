@@ -9,13 +9,13 @@
  *
  * Supported grammar (§11.1):
  *
- *   launchgraph scan [path]
+ *   sugarbee scan [path]
  *     --json            emit JSON report to stdout
  *     --out <dir>       output directory
  *     --offline         deterministic layer only; no network at all
  *     --checks <ids>    run a subset (comma-separated, e.g. LG-001,LG-004)
  *     --app <path>      select the app in a monorepo
- *   launchgraph eval
+ *   sugarbee eval
  */
 
 /** Resolved flags shared by both commands. */

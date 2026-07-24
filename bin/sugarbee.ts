@@ -1,6 +1,6 @@
 #!/usr/bin/env -S tsx
 /**
- * `launchgraph` executable — a thin wrapper.
+ * `sugarbee` executable — a thin wrapper.
  *
  * All logic lives in the pure `run(argv, io)` core; this file only wires the
  * real process to it (`realIo`) and propagates the returned §11.4 exit code.
@@ -10,7 +10,7 @@
  * constructs the `RealModelClient` here (mirroring how `realIo` owns real I/O)
  * and hands it to the online `run` overload. The library never reads the
  * environment itself — `RealModelClient` takes its config injected. The model
- * endpoint is LaunchGraph's own model API (the sole permitted egress, §10
+ * endpoint is SugarBee.ai's own model API (the sole permitted egress, §10
  * SEC-2), not a provider credential; provider credentials are never read
  * (SEC-3). Nothing else belongs here.
  */
@@ -25,9 +25,9 @@ import type { RealModelClientConfig } from '../src/model/realClient.js';
  * offline rather than half-configured.
  */
 function readModelConfig(): RealModelClientConfig | undefined {
-  const endpoint = process.env.LAUNCHGRAPH_MODEL_ENDPOINT;
-  const apiKey = process.env.LAUNCHGRAPH_MODEL_API_KEY;
-  const model = process.env.LAUNCHGRAPH_MODEL;
+  const endpoint = process.env.SUGARBEE_MODEL_ENDPOINT;
+  const apiKey = process.env.SUGARBEE_MODEL_API_KEY;
+  const model = process.env.SUGARBEE_MODEL;
   if (!endpoint || !apiKey || !model) return undefined;
   return { endpoint, apiKey, model };
 }

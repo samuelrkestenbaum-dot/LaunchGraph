@@ -142,7 +142,7 @@ describe('run() — scan default mode emits report.md (Commit 2)', () => {
     expect(md).toBeDefined();
     expect(md!.data).toContain('***REDACTED***');
     expect(md!.data).not.toContain('EXAMPLEnotreal');
-    expect(cap.out).toContain('LaunchGraph scan');
+    expect(cap.out).toContain('SugarBee.ai scan');
   });
 
   it('AT-23: report.md written by two fixed-clock runs is byte-identical', () => {

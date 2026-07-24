@@ -1,5 +1,5 @@
 /**
- * §9 fixture evaluation harness (library only — the `launchgraph eval` CLI
+ * §9 fixture evaluation harness (library only — the `sugarbee eval` CLI
  * arrives in a later slice).
  *
  * Discovers fixture repositories under a fixtures root, runs an injected

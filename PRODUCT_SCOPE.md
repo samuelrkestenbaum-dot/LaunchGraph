@@ -1,4 +1,4 @@
-# LaunchGraph: Complete Product Scope
+# SugarBee.ai: Complete Product Scope
 
 > This version incorporates production safety, ownership, environment separation,
 > previews, rollback, cost controls, operational readiness, evaluations, support
@@ -8,14 +8,14 @@
 
 ## 1. Executive summary
 
-LaunchGraph is a paid, repository-first launch operator installed into Claude
+SugarBee.ai is a paid, repository-first launch operator installed into Claude
 Code, Codex, and other agentic development environments.
 
 The user opens an application repository and delegates an outcome:
 
 > Make this project ready to operate as a real online business.
 
-LaunchGraph reads the codebase, determines what kind of product is being built,
+SugarBee.ai reads the codebase, determines what kind of product is being built,
 identifies its existing technology and service stack, inspects connected
 provider accounts, and finds everything missing between:
 
@@ -34,9 +34,9 @@ It then creates a dependency-aware launch plan and coordinates the work across:
 * The user's authenticated Chrome session
 * Local testing and verification tools
 * Human owners and approvers
-* Authorized LaunchGraph support operators when escalation is permitted
+* Authorized SugarBee.ai support operators when escalation is permitted
 
-LaunchGraph performs everything it can safely complete without interrupting the
+SugarBee.ai performs everything it can safely complete without interrupting the
 person. It prompts the person only when it needs:
 
 * A business decision
@@ -50,16 +50,16 @@ person. It prompts the person only when it needs:
 * Ownership confirmation
 * Resolution of material uncertainty
 
-When the person is needed, LaunchGraph routes them to the exact provider,
+When the person is needed, SugarBee.ai routes them to the exact provider,
 account, project, environment, screen, and prepared form where their
 involvement is required.
 
-LaunchGraph does not merely recommend services or generate a checklist. It
+SugarBee.ai does not merely recommend services or generate a checklist. It
 diagnoses, routes, prepares, executes, recovers, and verifies.
 
 The central promise is:
 
-> Connect your repository. LaunchGraph figures out what the business needs,
+> Connect your repository. SugarBee.ai figures out what the business needs,
 > routes every task to the right place, completes the configuration, and
 > verifies the entire customer journey—asking you only when human authority is
 > genuinely required.
@@ -100,11 +100,11 @@ Founders are forced to understand how domains, DNS, hosting, databases,
 authentication, payments, email, analytics, monitoring, background jobs,
 customer support, and legal requirements fit together.
 
-LaunchGraph owns this missing coordination layer.
+SugarBee.ai owns this missing coordination layer.
 
 ## 3. Product definition
 
-LaunchGraph is a business-launch orchestration system.
+SugarBee.ai is a business-launch orchestration system.
 
 It has four core functions.
 
@@ -148,7 +148,7 @@ Prove that:
 * Cancellation and failure paths behave correctly
 * The business is ready for launch
 
-LaunchGraph is not:
+SugarBee.ai is not:
 
 * A website builder
 * A hosting provider
@@ -163,17 +163,17 @@ LaunchGraph is not:
 
 A concise positioning statement is:
 
-> Claude Code builds your application. LaunchGraph launches and verifies the
+> Claude Code builds your application. SugarBee.ai launches and verifies the
 > business around it.
 
 ## 4. Product form
 
-LaunchGraph should initially be local-first and distributed through a public
+SugarBee.ai should initially be local-first and distributed through a public
 GitHub repository.
 
 The installation includes:
 
-* LaunchGraph CLI
+* SugarBee.ai CLI
 * Claude Code plugin
 * Codex skill
 * Local MCP server
@@ -184,25 +184,25 @@ The installation includes:
 * Browser-control bridge
 * Approval interface
 * Verification runner
-* LaunchGraph paid-service client
+* SugarBee.ai paid-service client
 
 Example installation:
 
 ```
-npx launchgraph install
+npx sugarbee install
 ```
 
 Example commands:
 
 ```
-/launchgraph:scan
-/launchgraph:status
-/launchgraph:plan
-/launchgraph:prepare
-/launchgraph:launch
-/launchgraph:verify
-/launchgraph:rollback
-/launchgraph:handoff
+/sugarbee:scan
+/sugarbee:status
+/sugarbee:plan
+/sugarbee:prepare
+/sugarbee:launch
+/sugarbee:verify
+/sugarbee:rollback
+/sugarbee:handoff
 ```
 
 The user should also be able to interact naturally:
@@ -211,7 +211,7 @@ The user should also be able to interact naturally:
 Get this project ready to launch.
 ```
 
-The paid LaunchGraph service supplies:
+The paid SugarBee.ai service supplies:
 
 * Maintained business-capability graph
 * Launch recipes
@@ -286,13 +286,13 @@ The first release should focus on TypeScript subscription SaaS.
 21. Never optimize recommendations around undisclosed affiliate revenue.
 22. Keep the person responsible for money, identity, ownership, legal
     acceptance, and final launch.
-23. Keep LaunchGraph responsible for everything else it can safely perform.
+23. Keep SugarBee.ai responsible for everything else it can safely perform.
 
 ## 7. Primary user experience
 
 ### 7.1 Repository-first analysis
 
-LaunchGraph begins by reading the repository.
+SugarBee.ai begins by reading the repository.
 
 It detects:
 
@@ -343,7 +343,7 @@ cannot be inferred safely.
 
 ### 7.2 Product inference
 
-LaunchGraph produces an evidence-backed interpretation:
+SugarBee.ai produces an evidence-backed interpretation:
 
 ```
 Inferred product:
@@ -379,7 +379,7 @@ Consequential findings must include repository evidence.
 
 ### 7.3 Existing-production classification
 
-Before modifying anything, LaunchGraph classifies the project:
+Before modifying anything, SugarBee.ai classifies the project:
 
 ```
 Greenfield
@@ -403,7 +403,7 @@ Signals include:
 * Existing production secrets
 * GitHub deployment environments
 
-If the project is live or status is unknown, LaunchGraph applies a more
+If the project is live or status is unknown, SugarBee.ai applies a more
 restrictive policy:
 
 * Read-only inspection first
@@ -416,7 +416,7 @@ restrictive policy:
 
 ### 7.4 Service-state inspection
 
-LaunchGraph distinguishes:
+SugarBee.ai distinguishes:
 
 ```
 SDK detected
@@ -441,7 +441,7 @@ Payment-to-access journey verified          ✗
 
 ### 7.5 Minimal clarification
 
-LaunchGraph asks only material questions not answerable from available
+SugarBee.ai asks only material questions not answerable from available
 evidence.
 
 Examples:
@@ -463,7 +463,7 @@ Routing is a primary product capability.
 
 ### 8.1 Capability routing
 
-LaunchGraph determines which provider should handle each requirement.
+SugarBee.ai determines which provider should handle each requirement.
 
 Example:
 
@@ -509,7 +509,7 @@ Verify signed webhook              → Verification runner
 
 ### 8.3 Account and project routing
 
-LaunchGraph identifies:
+SugarBee.ai identifies:
 
 * Provider
 * Organization
@@ -523,7 +523,7 @@ It must stop when account identity is ambiguous.
 
 ### 8.4 Interface routing
 
-When a person is needed, LaunchGraph should:
+When a person is needed, SugarBee.ai should:
 
 1. Open the correct provider.
 2. Verify the provider domain.
@@ -597,7 +597,7 @@ Explain:
 
 ### 9.3 Prepared approval
 
-Before interruption, LaunchGraph prepares everything possible.
+Before interruption, SugarBee.ai prepares everything possible.
 
 ```
 Ready for approval
@@ -648,7 +648,7 @@ The system routes the person to the prepared step and resumes afterward.
 
 ## 10. Approval and team authority
 
-LaunchGraph must support multiple roles.
+SugarBee.ai must support multiple roles.
 
 Possible roles:
 
@@ -697,7 +697,7 @@ Approvals should be narrow but not excessively fragmented.
 
 ## 11. Launch recipes
 
-LaunchGraph should initially use curated recipes rather than attempting
+SugarBee.ai should initially use curated recipes rather than attempting
 universal execution.
 
 A recipe defines:
@@ -753,14 +753,14 @@ Every capability and provider action must have a support classification.
 Tested inspection, execution, recovery, and verification.
 
 **Guided** —
-LaunchGraph can diagnose and route the person but does not guarantee
+SugarBee.ai can diagnose and route the person but does not guarantee
 execution.
 
 **Experimental** —
 Available with prominent warnings and smaller permissions.
 
 **Unsupported** —
-LaunchGraph explains the requirement but will not improvise production
+SugarBee.ai explains the requirement but will not improvise production
 changes.
 
 Example:
@@ -807,7 +807,7 @@ Browser automation is the broad fallback, not the foundation for every action.
 
 ## 14. Provider automation policies
 
-Every provider adapter should declare what LaunchGraph may do through:
+Every provider adapter should declare what SugarBee.ai may do through:
 
 * API
 * CLI
@@ -825,7 +825,7 @@ The policy should account for:
 * Regional requirements
 * Reselling restrictions
 
-LaunchGraph must not:
+SugarBee.ai must not:
 
 * Bypass CAPTCHA
 * Bypass MFA
@@ -834,12 +834,12 @@ LaunchGraph must not:
 * Evade provider restrictions
 * Misrepresent account ownership
 
-When automation is prohibited or uncertain, LaunchGraph should route the user
+When automation is prohibited or uncertain, SugarBee.ai should route the user
 to the exact step.
 
 ## 15. Repository analysis
 
-LaunchGraph combines:
+SugarBee.ai combines:
 
 ### Deterministic detection
 
@@ -933,7 +933,7 @@ This is a central commercial asset and must be versioned and tested.
 
 ## 17. Operational readiness
 
-LaunchGraph should inspect more than technical infrastructure.
+SugarBee.ai should inspect more than technical infrastructure.
 
 Capabilities may include:
 
@@ -959,12 +959,12 @@ These requirements may be marked:
 * Post-launch improvement
 * Not applicable
 
-LaunchGraph should not present legal conclusions. It may identify operational
+SugarBee.ai should not present legal conclusions. It may identify operational
 gaps and provide reviewable drafts or routes to appropriate professionals.
 
 ## 18. Environment separation
 
-LaunchGraph must model:
+SugarBee.ai must model:
 
 * Local
 * Test
@@ -988,7 +988,7 @@ Every consequential approval must display the environment prominently.
 
 ## 19. Change preview
 
-Before material changes, LaunchGraph generates a preview.
+Before material changes, SugarBee.ai generates a preview.
 
 Example:
 
@@ -1035,7 +1035,7 @@ Inspect → Plan → Preview → Approve → Apply → Verify
 
 ## 20. Rollback
 
-Before changing mutable external state, LaunchGraph captures the prior state.
+Before changing mutable external state, SugarBee.ai captures the prior state.
 
 Examples:
 
@@ -1065,7 +1065,7 @@ Irreversible actions must be labeled:
 * Certain provider charges
 * Permanent data deletion
 
-LaunchGraph must never imply that an irreversible action can be automatically
+SugarBee.ai must never imply that an irreversible action can be automatically
 undone.
 
 ## 21. Workflow state and recovery
@@ -1099,7 +1099,7 @@ The workflow must survive:
 * Network loss
 * Human delay
 
-Before retries, LaunchGraph inspects external reality.
+Before retries, SugarBee.ai inspects external reality.
 
 It must never blindly repeat:
 
@@ -1113,7 +1113,7 @@ It must never blindly repeat:
 
 ## 22. Cost governance
 
-LaunchGraph should calculate:
+SugarBee.ai should calculate:
 
 * Immediate cost
 * Monthly baseline
@@ -1157,7 +1157,7 @@ Any affiliate relationship affecting recommendations must be disclosed.
 Critical infrastructure must be owned by the customer or designated legal
 entity.
 
-LaunchGraph should not create customer assets under a LaunchGraph-controlled
+SugarBee.ai should not create customer assets under a SugarBee.ai-controlled
 master account.
 
 Track:
@@ -1261,7 +1261,7 @@ Repository completion is separate from external verification.
 
 ## 26. Secrets and security
 
-LaunchGraph should minimize central credential custody.
+SugarBee.ai should minimize central credential custody.
 
 Preferred credential order:
 
@@ -1400,7 +1400,7 @@ Not ready
 
 ## 29. Post-launch monitoring and incidents
 
-LaunchGraph should monitor:
+SugarBee.ai should monitor:
 
 * Domain and certificate health
 * Deployment availability
@@ -1425,12 +1425,12 @@ Incident flow:
 7. Record incident.
 8. Update playbook when appropriate.
 
-LaunchGraph must avoid noisy alerts. Only material conditions should interrupt
+SugarBee.ai must avoid noisy alerts. Only material conditions should interrupt
 the owner.
 
 ## 30. Evaluation framework
 
-LaunchGraph needs reference repositories with known conditions:
+SugarBee.ai needs reference repositories with known conditions:
 
 * Correct implementation
 * Missing webhook
@@ -1470,7 +1470,7 @@ A central metric should be:
 
 The paid beta should include an internal operator console.
 
-With explicit customer permission, an authorized LaunchGraph operator may
+With explicit customer permission, an authorized SugarBee.ai operator may
 assist when:
 
 * Automation reaches an unsupported state
@@ -1495,7 +1495,7 @@ universal automation already exists.
 
 ## 32. Compatibility and fallbacks
 
-LaunchGraph should account for:
+SugarBee.ai should account for:
 
 * Chrome unavailable
 * Different Chrome profile
@@ -1651,7 +1651,7 @@ Expand deliberately through tested capability packs.
 
 ## 36. MVP acceptance test
 
-Using a deliberately incomplete SaaS repository, LaunchGraph must:
+Using a deliberately incomplete SaaS repository, SugarBee.ai must:
 
 1. Detect the architecture.
 2. Infer the business model.
@@ -1684,7 +1684,7 @@ Using a deliberately incomplete SaaS repository, LaunchGraph must:
 
 ## 37. Final product definition
 
-LaunchGraph is a local-first, paid launch operator installed into Claude Code
+SugarBee.ai is a local-first, paid launch operator installed into Claude Code
 and Codex.
 
 It reads the repository, infers the business, understands existing external
@@ -1706,7 +1706,7 @@ The user delegates the outcome:
 
 > Make this repository into a working online business.
 
-LaunchGraph handles everything it safely can and asks the person only when the
+SugarBee.ai handles everything it safely can and asks the person only when the
 person is genuinely required.
 
 ---
@@ -1746,7 +1746,7 @@ External execution can initially be performed through:
 * The customer's Claude Code or Codex
 * Exact provider instructions
 * "Take me there" browser routing
-* Concierge assistance from LaunchGraph
+* Concierge assistance from SugarBee.ai
 * Limited automation for stable, low-risk actions
 
 This allows the customer to receive the outcome before every step is
@@ -1754,12 +1754,12 @@ productized.
 
 ## Revised first product
 
-**LaunchGraph Production Readiness**
+**SugarBee.ai Production Readiness**
 
 A customer connects a Next.js SaaS repository and optionally grants read-only
 access to Vercel, Supabase, Stripe, Resend, PostHog and Sentry.
 
-LaunchGraph returns:
+SugarBee.ai returns:
 
 1. What the application appears to be
 2. Which services it uses
@@ -1829,7 +1829,7 @@ providers.
 ```
 Agency connects client repository
         ↓
-LaunchGraph scans repository
+SugarBee.ai scans repository
         ↓
 Read-only provider checks
         ↓
@@ -1837,9 +1837,9 @@ Readiness report generated
         ↓
 Claude/Codex remediation packages created
         ↓
-Agency or LaunchGraph concierge completes external configuration
+Agency or SugarBee.ai concierge completes external configuration
         ↓
-LaunchGraph runs canonical customer journey
+SugarBee.ai runs canonical customer journey
         ↓
 Ready / Ready with warnings / Not ready
         ↓
@@ -1944,18 +1944,18 @@ Every stage is separately useful and sellable.
 
 ## Strategic direction
 
-Adopt the narrowed audit-first wedge, but retain LaunchGraph as the broader
+Adopt the narrowed audit-first wedge, but retain SugarBee.ai as the broader
 brand and architecture.
 
 The immediate product definition should be:
 
-> LaunchGraph is the production-readiness and launch-verification layer for
+> SugarBee.ai is the production-readiness and launch-verification layer for
 > AI-built SaaS applications. It reads the repository and connected provider
 > state, identifies consequential launch gaps, creates remediation packages
 > for Claude Code and Codex, and verifies the complete customer journey.
 
 The first milestone should be one deliberately incomplete reference SaaS where
-LaunchGraph detects the 15 known conditions, produces an excellent report,
+SugarBee.ai detects the 15 known conditions, produces an excellent report,
 generates agent-ready fixes, and validates the corrected customer journey.
 
 Once that works, run it on real agency projects with concierge support. Those

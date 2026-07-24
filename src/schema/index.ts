@@ -72,7 +72,7 @@ export type DecisionValue = 'ready' | 'ready_with_warnings' | 'not_ready' | 'not
 
 export interface Report {
   schemaVersion: string;
-  launchgraphVersion: string;
+  sugarbeeVersion: string;
   scannedAt: string; // ISO 8601
   repo: { root: string; commit: string | null; dirty: boolean };
   stack: Array<{ provider: string; signals: string[]; support: SupportLevel }>;
@@ -263,7 +263,7 @@ export function validateReport(value: unknown): ValidationResult {
   if (value['schemaVersion'] !== SCHEMA_VERSION) {
     errors.push(`report.schemaVersion: expected '${SCHEMA_VERSION}'`);
   }
-  checkString(errors, value['launchgraphVersion'], 'report.launchgraphVersion', { nonEmpty: true });
+  checkString(errors, value['sugarbeeVersion'], 'report.sugarbeeVersion', { nonEmpty: true });
   if (checkString(errors, value['scannedAt'], 'report.scannedAt', { nonEmpty: true })) {
     if (Number.isNaN(Date.parse(value['scannedAt'] as string))) {
       errors.push('report.scannedAt: expected an ISO 8601 timestamp');

@@ -45,7 +45,7 @@ import type { Fileset } from './collect.js';
 import { buildEvidence } from './redact.js';
 
 /** Version stamped into every report (matches package.json). */
-export const LAUNCHGRAPH_VERSION = '0.1.0';
+export const SUGARBEE_VERSION = '0.1.0';
 
 export interface ScannerOptions {
   /** Injectable clock for `scannedAt`; defaults to the real clock. */
@@ -181,7 +181,7 @@ function assembleReport(
 
   return {
     schemaVersion: SCHEMA_VERSION,
-    launchgraphVersion: LAUNCHGRAPH_VERSION,
+    sugarbeeVersion: SUGARBEE_VERSION,
     scannedAt: now().toISOString(),
     repo: { root: fileset.root, commit: null, dirty: false },
     stack,

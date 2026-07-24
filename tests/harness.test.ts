@@ -25,7 +25,7 @@ afterAll(() => {
 });
 
 function makeFixturesRoot(): string {
-  const root = mkdtempSync(join(tmpdir(), 'launchgraph-harness-'));
+  const root = mkdtempSync(join(tmpdir(), 'sugarbee-harness-'));
   tempRoots.push(root);
   return root;
 }
