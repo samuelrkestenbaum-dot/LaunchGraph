@@ -24,7 +24,7 @@ describe('redact — SEC-4 secret masking', () => {
 
   it('masks test keys and Stripe webhook secrets while keeping the prefix', () => {
     expect(redact(FAKE_TEST_KEY)).toBe(`pk_test_${REDACTION_MARKER}`);
-    expect(redact('whsec_abcDEF123456ghijkLMNOP')).toBe(`whsec_${REDACTION_MARKER}`);
+    expect(redact('whsec_abcDEF123456')).toBe(`whsec_${REDACTION_MARKER}`);
   });
 
   it('masks PEM private-key blocks', () => {

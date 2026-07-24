@@ -21,6 +21,12 @@ export interface FindingParams {
   classification?: Classification;
   /** Defaults to 1.0 (confirmed). */
   confidence?: number;
+  /**
+   * Optional §5 external-verification marker. When present it is spread into
+   * the returned Finding verbatim; when absent the key is omitted (so
+   * detectors that carry no external half — LG-001/002/004 — are unaffected).
+   */
+  externalVerification?: Finding['externalVerification'];
 }
 
 /** Zero-pads a sequence to the `LG-00X-00N` finding-id convention. */
@@ -47,7 +53,22 @@ export function makeFinding(params: FindingParams): Finding {
     confidence: params.confidence ?? 1,
     summary: params.summary,
     evidence: params.evidence,
+    ...(params.externalVerification !== undefined
+      ? { externalVerification: params.externalVerification }
+      : {}),
   };
+}
+
+/**
+ * Builds a §5 `externalVerification` marker. The `'phase-3'` literal lives
+ * here as its single source of truth so detectors never restate it. External
+ * verification always belongs to Phase 3 (§13) in Phase 1.
+ */
+export function makeExternalVerification(
+  provider: string,
+  what: string,
+): NonNullable<Finding['externalVerification']> {
+  return { provider, what, phase: 'phase-3' };
 }
 
 /** Basename (last POSIX segment) of a repo-relative path. */
