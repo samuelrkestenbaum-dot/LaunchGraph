@@ -18,18 +18,29 @@
  *   2  scan error (or usage/parse error)
  *   3  not_evaluated (unsupported stack)
  *
- * Commit 1 implements the `scan` command; the `eval` command is added in
- * Commit 2.
+ * The `scan` command emits the canonical JSON report plus the §11.3 human
+ * report.md and §11.2 banner; the `eval` command wraps the §9 fixture harness.
  */
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { serializeReport } from '../report/serialize.js';
-import { exitCodeForDecision, SCAN_ERROR_EXIT_CODE } from '../eval/harness.js';
+import { exitCodeForDecision, runEvaluation, SCAN_ERROR_EXIT_CODE } from '../eval/harness.js';
+import type { EvalSummary } from '../eval/harness.js';
 import { createScanner } from '../scan/scanner.js';
 import type { Report } from '../schema/index.js';
 import { parseArgs } from './args.js';
 import type { CliFlags } from './args.js';
+import { renderBanner } from './banner.js';
 import type { Io } from './io.js';
+import { renderReportMd } from './reportMd.js';
+
+/**
+ * The vendored fixtures live at `<repo>/fixtures` — two levels up from this
+ * module (`src/cli/run.ts`). A module-relative constant, not a host input, so
+ * the `eval` command stays deterministic and reads no environment (SEC-3).
+ */
+const FIXTURES_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'fixtures');
 
 /**
  * Resolves the directory to scan: the positional path against cwd, then the
@@ -39,11 +50,6 @@ import type { Io } from './io.js';
 function resolveScanTarget(io: Io, path: string, flags: CliFlags): string {
   const base = resolve(io.cwd(), path);
   return flags.app !== undefined ? resolve(base, flags.app) : base;
-}
-
-/** Minimal Commit-1 human decision line (the rich banner arrives in Commit 2). */
-function decisionLine(report: Report): string {
-  return `DECISION — ${report.counts.blockers} blockers, ${report.counts.warnings} warnings\n`;
 }
 
 /** Runs the `scan` command and returns its exit code. */
@@ -67,13 +73,43 @@ function runScan(target: string, flags: CliFlags, io: Io): number {
     return exitCode;
   }
 
-  // Default mode: write report.json into the output directory (--out, else
-  // <target>/.launchgraph) and print a human decision line. Writes are confined
-  // to the output directory (SEC-6).
+  // Default mode: write report.json + report.md into the output directory
+  // (--out, else <target>/.launchgraph) and print the banner. Writes are
+  // confined to the output directory (SEC-6). The renderers consume only the
+  // already-redacted evidence on the report (SEC-4).
   const outDir = flags.out !== undefined ? resolve(io.cwd(), flags.out) : join(target, '.launchgraph');
-  io.writeFile(join(outDir, 'report.json'), serializeReport(report));
-  io.stdout(decisionLine(report));
+  const reportJsonPath = join(outDir, 'report.json');
+  const reportMdPath = join(outDir, 'report.md');
+  io.writeFile(reportJsonPath, serializeReport(report));
+  io.writeFile(reportMdPath, renderReportMd(report));
+  io.stdout(renderBanner(report));
+  io.stdout(`\nReport: ${reportMdPath} · ${reportJsonPath}\n`);
   return exitCode;
+}
+
+/** Formats the §9.2 evaluation summary for the terminal (deterministic). */
+function renderEvalSummary(summary: EvalSummary): string {
+  const lines: string[] = [`launchgraph eval — ${summary.fixtureCount} fixture(s)`, ''];
+  for (const r of summary.results) {
+    const tag = r.decisionCorrect && r.exitCodeCorrect && r.reportValid ? 'OK' : 'XX';
+    const actual = r.actualDecision ?? `scan error: ${r.scanError ?? 'unknown'}`;
+    lines.push(`[${tag}] ${r.name} — expected ${r.expectedDecision}, got ${actual}`);
+  }
+  lines.push(
+    '',
+    `Decisions correct: ${summary.decisionsCorrect}/${summary.fixtureCount}`,
+    `Blocker false positives: ${summary.blockerFalsePositives}`,
+  );
+  const pass = summary.allDecisionsCorrect && summary.blockerFalsePositives === 0;
+  lines.push('', pass ? 'PASS' : 'FAIL');
+  return `${lines.join('\n')}\n`;
+}
+
+/** Runs the `eval` command over the vendored fixtures and returns its exit code. */
+function runEval(io: Io): number {
+  const summary = runEvaluation(FIXTURES_ROOT, createScanner({ now: () => io.now() }));
+  io.stdout(renderEvalSummary(summary));
+  return summary.allDecisionsCorrect && summary.blockerFalsePositives === 0 ? 0 : 1;
 }
 
 /**
@@ -91,7 +127,5 @@ export function run(argv: string[], io: Io): number {
     return runScan(resolveScanTarget(io, parsed.path, parsed.flags), parsed.flags, io);
   }
 
-  // 'eval' is wired to the fixture harness in Commit 2.
-  io.stderr('launchgraph: `eval` is not available in this build\n');
-  return SCAN_ERROR_EXIT_CODE;
+  return runEval(io);
 }
