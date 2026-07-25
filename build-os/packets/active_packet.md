@@ -4,44 +4,80 @@
 > the builder implements exactly this and nothing else; the archivist clears it
 > on close. One packet at a time.
 
-- **Status:** none active (last closed: **P-005** — see `build-os/receipts/P-005.md`).
+- **Status:** **NONE ACTIVE.**
+- **Last closed:** **A-S1b** — Phase 1 Repository Auditor — shared webhook
+  locator + LG-006 deterministic-disjunct fidelity fix + `broken-lg-006` fixture
+  (AT-06 via eval) — Fork Branch A, Slice 1b. Closed **2026-07-25**.
+  Receipt: `build-os/receipts/A-S1b.md`.
+  - qa **GREEN** — `npm test` **233 passed / 25 files** (base `ed71d6e` was
+    213/24); typecheck clean; `npm run eval` **11 fixtures, 11/11 decisions,
+    0 blocker false positives**. Commit-1 isolation at `7683d74` **GREEN**
+    (223/25 in a fresh `npm ci` worktree). Engine + schema blob SHAs unchanged
+    (emit-only preserved). Safety grep clean.
+  - reviewer **PASS as fixed**, after one fix-then-pass round that removed a
+    false blocker on a *correct delegating* handler.
+  - Commits `7683d74` (Commit 1) and `6509b35` (Commit 2, amended from
+    `6fa0060`); pushed as a fast-forward **`ed71d6e..6509b35`**. Branch tip
+    `6509b35`.
 
 ---
 
-## Staged candidate (awaiting orchestrator shaping + explicit go)
+## Staged candidate — NOT active, awaiting orchestrator shaping + explicit go
 
-- **Status:** candidate — awaiting orchestrator shaping + explicit go. NOT activated.
-- **Working id:** A-S2 (Fork Branch A, Slice 2)
-- **Nominal title:** Phase 1 Repository Auditor — LG-005 (non-idempotent webhook, Layer D+M) via the model-layer substrate.
+- **Candidate id:** **A-S2**
+- **Candidate title:** Phase 1 Repository Auditor — **LG-005 (non-idempotent
+  webhook, Layer D+M)** — Fork Branch A, Slice 2
+- **Why it is next:** LG-005 is the next detector on Branch A, and A-S1b handed
+  it **the shared webhook-locator seam it needed** (`src/scan/webhook.ts`,
+  all-handlers `.filter()` contract, deterministic via `collect.ts:270`'s path
+  sort). LG-005 is its intended third consumer.
 
-### Recommendation for the orchestrator to shape (IMPORTANT)
+### OPEN QUESTION THE ORCHESTRATOR MUST DECIDE BEFORE SHAPING A-S2
 
-Before or WITH LG-005, the next slice should first land a bundle — these three are naturally one unit and A-S2 needs the locator anyway:
+**Does the D→M surfacing contract change land BEFORE A-S2, or WITH it?**
 
-1. **Extract the shared webhook-handler locator** (currently restated byte-identically in `lg004.ts` + `lg006.ts`) into a shared module (e.g. `src/scan/webhook.ts` or `detectorKit`), with a guard test asserting the locators agree. LG-005 will be a THIRD consumer, so do this before it lands. Reconcile the `.find()` (LG-006, first-handler-only) vs `.filter()` (LG-004, all-handlers) multi-handler behavior here. (Residue follow-up #2.)
-2. **Fix the LG-006 deterministic-disjunct fidelity gap** — a FULLY MISSING cancellation branch must emit a deterministic `confirmed` blocker `fail` that stands even under `--offline` (today it reports `unknown`/`inferred` — a false-negative on the canonical LG-006 defect in the deterministic/CI path). Reserve `unknown`/`inferred` for the branch-present-but-unconfirmed case. This is a FIDELITY gap, not a safety gap (the deterministic signal is already captured). (Residue TOP ITEM / follow-up #1.)
-3. **Add the `broken-lg-006` eval fixture** and AT-06-via-eval, sequenced with #2.
+Residue items — the TOP ITEM (LG-006 deterministic-disjunct fidelity gap, **half
+closed**: the offline/CI path is closed, **the online path still substitutes
+model judgment for a required deterministic signal, spec §4.3**) and the
+companion item (**the "never manufacture a false blocker" guarantee is
+OFFLINE-ONLY** — `request.excerpts` carries only handler files, and
+`lg006.ts:240` still gates the fail-establishing supporting fact on the narrow
+handler-file signal) — share **one root cause and one fix surface: what the
+deterministic layer surfaces to the model.**
 
-The orchestrator must decide whether this bundle is its own slice (A-S1b) or folds into A-S2, and decompose to ≤2 commits at go time.
+**LG-005 will need that same contract change.** So A-S2 must either (a) be
+sequenced behind a shaped D→M-contract packet, or (b) absorb it explicitly in
+its own scope with a widened assertion budget. **Do not let A-S2 be shaped on the
+assumption that the contract is already settled.** Note also that the deferred
+fix is a genuine design question, not a mechanical edit: it makes
+`fact:lg006.no-cancellation-branch` dead code and costs LG-006 its only
+contradiction-guard test, with no branch-present deterministic fact to replace
+it.
 
-### Likely goal / "done" (LG-005 portion)
+### Carry into whatever gets shaped next
 
-- Implement LG-005 (non-idempotent webhook handler) as a Layer D+M check plugged into the existing substrate: a Layer-D surface fn (using the SHARED webhook locator from item 1) + an `InferencePresentation`, run through `runInferenceContract`. Model receives only deterministic-surfaced, already-redacted excerpts wrapped as SEC-5 untrusted data; no tools; cite-or-discard; classified at best `inferred`, capped 0.9, `contradictory` on disagreement; `--offline` → `unknown` ("model layer disabled"). Engine + schema UNCHANGED (emit-only). Full suite green; Commit-1 green in isolation; eval stays 10/10 / 0 blocker FPs.
-
-### Branch base
-
-- origin/`claude/sugarbee-project-handoff-ic47uc` @ **a00d194** (the P-005 tip `fb5663b` plus the brand rename `b9c8ff5` and the handoff doc `a00d194`; the retired `claude/launchgraph-product-scope-43pgdx` points at the identical commit). Re-verify via `git merge-base` at builder start.
-
-### Carry-forward constraints (bind this slice)
-
-- **Model-layer safety boundary** — credential boundary at the bin only; `RealModelClient` bin-only over built-in `fetch`, no `process.env` in model/detector code; `FakeModelClient` drives ALL tests; SEC-5 delimited untrusted data; emit-only (engine + schema byte-identical).
-- **externalVerification obligation** — LG-012 is the LAST pending external check (A-S7); the substrate threads it via `InferencePresentation.externalVerification`.
-- **TEST-DATA POLICY** — <20 contiguous alphanumerics for every key-shaped fake; no Sentry-DSN shapes; every surface incl. receipts/memory; never allowlist a secret.
-- **CEILING WATCH-ITEM** — `hasAppSignal ⊇ scanner.supported`; add the AT-16 regression when `golden/` lands.
-- **The model-layer substrate seam** — `ModelClient`/`InferenceRequest`/`InferenceResult`/`runInferenceContract`/`InferencePresentation` is the plug-in point; A-S2 supplies a Layer-D surface fn + a presentation.
-- **Registry is the single source** of check metadata (severity/blocker/provider via `makeFinding`).
+- **Standing constraints** (see `build-os/memory/residue.md`): TEST-DATA POLICY;
+  MODEL-LAYER SAFETY BOUNDARY (credential boundary at `bin/sugarbee.ts` only);
+  EMIT-ONLY engine + schema (blob SHAs unchanged); registry is the single source
+  of severity/blocker/provider; externalVerification obligation (LG-012 is the
+  last pending external check, A-S7); CEILING INVARIANT
+  `hasAppSignal ⊇ scanner.supported`; AT-23 determinism; **`node_modules`
+  exclusion is load-bearing**; **the shared webhook locator is one contract** —
+  import it, do not restate the predicate (`lg003.ts:51` is still an unmigrated
+  third copy).
+- **Working contract:** verify the branch base with `git merge-base` at builder
+  start; ≤2 commits; Commit-1 green in isolation; full proof + safety grep before
+  close.
+- **Standing flag, not this packet's work:** **this repo has no default branch** —
+  no `main`/`master` locally or on the remote, only the two `claude/*` branches.
+  `git merge-base HEAD origin/main` fails. "Never merge without go" currently has
+  no target and an eventual PR has nowhere to land. Needs a user decision at some
+  point.
+- **Process note:** **no Codex second-eyes pass is available in this environment**
+  (`codex` not on PATH, no plugin). Review is single-model analysis plus
+  empirical probes — do not overstate the proof standard in future receipts.
 
 ---
-_Cleared by the archivist on close of P-005 (2026-07-23). No packet is active until
-the orchestrator shapes the next slice and the user gives explicit go. Merge and PR
-remain hard stops; no deploy, no secrets, no provider access._
+_Cleared by the archivist on close of A-S1b (2026-07-25). A-S2 (LG-005) is staged
+as a candidate only — it is NOT active and requires orchestrator shaping plus the
+user's explicit go before any builder work begins._
