@@ -414,3 +414,104 @@ describe('LG-006 surfacing contract (C3) — the model sees what the handler del
     expect(candidates.request.question).not.toMatch(/NOTE ON COMPLETENESS/);
   });
 });
+
+describe('LG-006 surface — .mts/.cts and the prose allowlist (A-S2 C1)', () => {
+  /** A delegating repo whose cancellation branch lives at `ext`. */
+  function delegatingWith(ext: string): Record<string, string> {
+    return {
+      'app/api/stripe/webhook/route.ts': `import { handleStripeEvent } from '../../../../lib/events';
+export async function POST(req: Request) {
+  const sig = req.headers.get('stripe-signature')!;
+  const event = stripe.webhooks.constructEvent(await req.text(), sig, process.env.STRIPE_WEBHOOK_SECRET!);
+  await handleStripeEvent(event);
+  return new Response('ok');
+}
+`,
+      [`lib/events.${ext}`]: `export async function handleStripeEvent(event: any) {
+  switch (event.type) {
+    case 'customer.subscription.deleted':
+      await db.orgs.update({ where: { id: event.data.object.customer }, data: { plan: 'free' } });
+      break;
+  }
+}
+`,
+    };
+  }
+
+  for (const ext of ['mts', 'cts']) {
+    it(`DC-3: surfaces lib/events.${ext} and asserts NO fail-establishing fact`, () => {
+      const { fileset } = makeRepo(delegatingWith(ext));
+      const candidates = surfaceLg006Candidates(fileset) as Lg006Applicable;
+      expect(candidates.request.excerpts.some((e) => e.path === `lib/events.${ext}`)).toBe(true);
+      expect(candidates.request.supportingFacts ?? []).toHaveLength(0);
+    });
+  }
+
+  it('DC-4/TRAP 7: a .sql-only repo emits NO fact and DISCLOSES why in the question', () => {
+    const { fileset } = makeRepo({
+      'app/api/stripe/webhook/route.ts': HANDLER_NO_CANCELLATION,
+      'migrations/001_cancel.sql':
+        "-- on customer.subscription.deleted we flip the row\nUPDATE orgs SET plan='free' WHERE sub_id=$1;\n",
+    });
+    const candidates = surfaceLg006Candidates(fileset) as Lg006Applicable;
+    // A database migration CAN revoke access, so claiming "nothing can" is false.
+    expect(candidates.request.supportingFacts ?? []).toHaveLength(0);
+    // Suppression alone is not enough — the reason must reach the model.
+    expect(candidates.request.question).toMatch(/1 non-source file/i);
+    expect(candidates.request.question).toMatch(/NOTE ON COMPLETENESS/);
+    // Still never surfaced (SEC-5 bound unchanged).
+    expect(candidates.request.excerpts.some((e) => e.path.endsWith('.sql'))).toBe(false);
+  });
+
+  it('DC-4/TRAP 7: a .prisma-only repo behaves the same way', () => {
+    const { fileset } = makeRepo({
+      'app/api/stripe/webhook/route.ts': HANDLER_NO_CANCELLATION,
+      'prisma/schema.prisma': '// customer.subscription.deleted handled by trigger\nmodel Org { id String @id }\n',
+    });
+    const candidates = surfaceLg006Candidates(fileset) as Lg006Applicable;
+    expect(candidates.request.supportingFacts ?? []).toHaveLength(0);
+    expect(candidates.request.question).toMatch(/1 non-source file/i);
+  });
+
+  it('DC-4/TRAP 7 (the discriminating direction): a README-only repo STILL emits the fact', () => {
+    // The guard must discriminate, not be vacuous. Prose genuinely cannot
+    // revoke access, so the deterministic claim remains true and live.
+    const { fileset } = makeRepo({
+      'app/api/stripe/webhook/route.ts': HANDLER_NO_CANCELLATION,
+      'README.md': 'We handle customer.subscription.deleted somewhere.\n',
+    });
+    const candidates = surfaceLg006Candidates(fileset) as Lg006Applicable;
+    const facts = candidates.request.supportingFacts ?? [];
+    expect(facts).toHaveLength(1);
+    expect(facts[0]?.establishesVerdict).toBe('fail');
+    // ...and the statement must no longer claim "configuration" cannot act.
+    expect(facts[0]?.statement).not.toMatch(/configuration/i);
+  });
+
+  it('a repo mixing prose AND a .sql carrier suppresses the fact (the .sql dominates)', () => {
+    const { fileset } = makeRepo({
+      'app/api/stripe/webhook/route.ts': HANDLER_NO_CANCELLATION,
+      'README.md': 'customer.subscription.deleted\n',
+      'migrations/001.sql': '-- customer.subscription.deleted\n',
+    });
+    const candidates = surfaceLg006Candidates(fileset) as Lg006Applicable;
+    expect(candidates.request.supportingFacts ?? []).toHaveLength(0);
+  });
+
+  it('DC-6: no excerpt outside the surfaceable extension set, on a repo full of distractors', () => {
+    const { fileset } = makeRepo({
+      'app/api/stripe/webhook/route.ts': HANDLER_NO_CANCELLATION,
+      'lib/events.mts': "case 'customer.subscription.deleted': await revoke(e);\n",
+      'README.md': 'customer.subscription.deleted\n',
+      'docs/x.mdx': 'customer.subscription.deleted\n',
+      'migrations/001.sql': '-- customer.subscription.deleted\n',
+      'prisma/schema.prisma': '// customer.subscription.deleted\n',
+      '.env.production': 'NOTE=customer.subscription.deleted\n',
+    });
+    const candidates = surfaceLg006Candidates(fileset) as Lg006Applicable;
+    const allowed = new Set(['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'mts', 'cts']);
+    for (const e of candidates.request.excerpts) {
+      expect(allowed.has(e.path.split('.').pop() ?? ''), e.path).toBe(true);
+    }
+  });
+});

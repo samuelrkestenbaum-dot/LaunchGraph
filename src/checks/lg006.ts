@@ -54,9 +54,14 @@
  * detector only surfaces excerpts (Layer D) and interprets an already-resolved
  * judgment.
  */
-import { fileLines, isCodeFile } from '../scan/collect.js';
+import { fileLines } from '../scan/collect.js';
 import type { CollectedFile, Fileset } from '../scan/collect.js';
 import { buildAbsenceEvidence, buildEvidence } from '../scan/redact.js';
+import {
+  isModelSurfaceableFile,
+  partitionWithheldCarriers,
+  surfaceDelegatedCandidates,
+} from '../scan/surface.js';
 import { locateWebhookHandlers } from '../scan/webhook.js';
 import type { Evidence, Finding } from '../schema/index.js';
 import type { InferenceRequest, InferenceResult, ResponseSchemaDescriptor, SupportingFact } from '../model/client.js';
@@ -67,6 +72,12 @@ import { makeFinding } from './detectorKit.js';
 const SUB_DELETED_RE = /customer\.subscription\.deleted/;
 const SUB_UPDATED_RE = /customer\.subscription\.updated/;
 const CANCELED_STATUS_RE = /canceled|cancelled|cancel_at_period_end|cancel_at\b/;
+/**
+ * LINE-level window anchor — deliberately DISJUNCTIVE, unlike the conjunctive
+ * file-selection predicate {@link mentionsCancellationBranch}. Once a file has
+ * been selected, either event name is a good place to centre the window.
+ */
+const SUB_EVENT_ANCHOR_RE = /customer\.subscription\.(?:deleted|updated)/;
 /** Dotted event-name string literals, e.g. `customer.subscription.deleted`. */
 const EVENT_NAME_RE = /['"`]([a-z_]+(?:\.[a-z_]+)+)['"`]/g;
 
@@ -120,6 +131,27 @@ function elisionDisclosure(elided: number): string {
     'Treat the surfaced set as incomplete: the absence of a downgrade in what you can see is not evidence that none exists.'
   );
 }
+
+/**
+ * Discloses files withheld because they are **not source code** — chiefly `.sql`
+ * migrations and `.prisma` schemas, which the SEC-5 prompt bound excludes.
+ *
+ * These are exactly the files a "nothing in this repository handles it" claim
+ * would be wrong about: a unique constraint or trigger genuinely can revoke
+ * access. Since the surface cannot show them and the deterministic layer cannot
+ * honestly discount them, the only truthful move is to say they exist and that
+ * their contents are unknown. Like the cap disclosure, this argues completeness
+ * in neither direction.
+ */
+function withheldNonSourceDisclosure(count: number): string {
+  if (count <= 0) return '';
+  return (
+    ` NOTE ON COMPLETENESS: ${count} non-source file(s) in this repository (for example database migrations ` +
+    'or schema definitions) also reference subscription cancellation but were NOT surfaced to you, because ' +
+    'only source code is sent to the model. Such a file can enforce real behaviour — a database constraint ' +
+    'or trigger can remove access — so treat their contents as unknown rather than as absent.'
+  );
+}
 /** Window around the first matching line in a delegated file. */
 const WINDOW_BEFORE = 10;
 const WINDOW_AFTER = 30;
@@ -170,14 +202,16 @@ export interface Lg006Applicable {
    */
   hasCancellationSignalAnywhere: boolean;
   /**
-   * Deterministic: a cancellation signal appears in at least one **code** file.
-   * Gates the fail-establishing supporting fact — when every mention is prose
-   * (README, agent spec, a SQL comment, a commented-out branch), the
-   * deterministic layer has a real and defensible opinion that nothing
-   * executable handles cancellation, and a model that answers `pass` is
-   * genuinely contradicting it.
+   * Deterministic: a cancellation signal appears in at least one file the D→M
+   * surface is allowed to show the model (`isModelSurfaceableFile`).
+   *
+   * Half of the fail-establishing fact's gate. The other half is a **prose
+   * allowlist**: the fact may only be asserted when every mention the surface
+   * could not show is positively recognised documentation. A `.sql` migration
+   * or `.prisma` schema is withheld but is NOT inert, so it suppresses the
+   * fact rather than supporting it.
    */
-  hasCodeCancellationSignal: boolean;
+  hasSurfaceableCancellationSignal: boolean;
   /** Dotted event names handled across all located handlers, deduplicated and sorted. */
   handledEvents: string[];
   /** The bounded request for the model layer (excerpts already redacted). */
@@ -238,12 +272,15 @@ export function surfaceLg006Candidates(fileset: Fileset): Lg006Candidates {
   // manufactures the same false blocker on path aliases, barrel re-exports and
   // multi-hop delegation, which are all ordinary Next.js shapes.
   const hasCancellationSignalAnywhere = fileset.files.some((f) => mentionsCancellationBranch(f.content));
-  // Narrower: only executable code counts. Prose that merely NAMES the event
-  // keeps the unappealable blocker off (above) but does not stop the
-  // deterministic layer from telling the model that nothing in code handles it.
-  const hasCodeCancellationSignal = fileset.files.some(
-    (f) => isCodeFile(f.path) && mentionsCancellationBranch(f.content),
+  // Narrower: only source the model can actually be shown counts.
+  const hasSurfaceableCancellationSignal = fileset.files.some(
+    (f) => isModelSurfaceableFile(f.path) && mentionsCancellationBranch(f.content),
   );
+  // Everything carrying the signal that the prompt bound excludes, split by
+  // whether it is recognised prose. This is an ALLOWLIST: a file is only
+  // treated as incapable of acting if it is positively identified as
+  // documentation. `.sql` / `.prisma` land in `other` and block the fact.
+  const withheld = partitionWithheldCarriers(fileset, mentionsCancellationBranch);
   const handledEvents = enumerateEvents(handlers);
 
   // Per handler: the whole handler (context for the model), then — when that
@@ -293,60 +330,44 @@ export function surfaceLg006Candidates(fileset: Fileset): Lg006Candidates {
   // The question is scoped to the REPOSITORY's cancellation handling, so the
   // surface must follow the question rather than the handler file. A route that
   // verifies and delegates keeps its branch in a lib module; surfacing only the
-  // handler asks the model about code it was never shown. Bounded, windowed,
-  // path-sorted (the collector's order) and CODE-ONLY — see `isCodeFile`, which
-  // is what keeps a scanned repo's README / agent specs out of the prompt.
-  const handlerPathSet = new Set(handlers.map((h) => h.path));
-  const delegated = fileset.files.filter(
-    (f) => !handlerPathSet.has(f.path) && isCodeFile(f.path) && mentionsCancellationBranch(f.content),
-  );
-  const surfaced = delegated.slice(0, MAX_DELEGATED_EXCERPTS);
-  const elided = delegated.length - surfaced.length;
-  surfaced.forEach((file, i) => {
-    const lines = fileLines(file);
-    const matchIdx = lines.findIndex((l) => SUB_DELETED_RE.test(l) || SUB_UPDATED_RE.test(l));
-    const anchorIdx = matchIdx >= 0 ? matchIdx : 0;
-    const start = Math.max(0, anchorIdx - WINDOW_BEFORE);
-    const end = Math.min(lines.length - 1, anchorIdx + WINDOW_AFTER);
-    const isLast = i === surfaced.length - 1;
-    const elisionNote =
-      isLast && elided > 0
-        ? ` ${elided} more code file(s) carrying a cancellation signal were not surfaced (cap: ${MAX_DELEGATED_EXCERPTS}).`
-        : '';
-    excerpts.push(
-      buildEvidence({
-        path: file.path,
-        startLine: start + 1,
-        endLine: end + 1,
-        rawExcerpt: lines.slice(start, end + 1).join('\n'),
-        kind: 'code',
-        note:
-          'Non-handler code file carrying a subscription-cancellation signal, surfaced because the webhook handler may delegate the downgrade to it.' +
-          elisionNote,
-      }),
-    );
+  // handler asks the model about code it was never shown. `selects` is
+  // deliberately the CONJUNCTIVE predicate while `anchor` is disjunctive — see
+  // `src/scan/surface.ts`; collapsing them would widen file selection.
+  const delegatedSurface = surfaceDelegatedCandidates(fileset, {
+    handlers,
+    selects: mentionsCancellationBranch,
+    anchor: SUB_EVENT_ANCHOR_RE,
+    cap: MAX_DELEGATED_EXCERPTS,
+    windowBefore: WINDOW_BEFORE,
+    windowAfter: WINDOW_AFTER,
+    note: 'Non-handler code file carrying a subscription-cancellation signal, surfaced because the webhook handler may delegate the downgrade to it.',
+    signalLabel: 'cancellation signal',
   });
+  excerpts.push(...delegatedSurface.excerpts);
+  const elided = delegatedSurface.elided;
 
   const supportingFacts: SupportingFact[] = [];
-  if (!hasCodeCancellationSignal) {
-    // Deliberately CODE-scoped, not handler-scoped. The retired
-    // `fact:lg006.no-cancellation-branch` asserted a handler-file claim that was
-    // simply false on the delegating idiom, so a model answering correctly was
-    // marked contradictory against a wrong fact. This claim is true whenever it
-    // is emitted: nothing executable in the repository handles cancellation.
+  if (!hasSurfaceableCancellationSignal && withheld.other.length === 0) {
+    // PROSE ALLOWLIST, not a code denylist. The fact may only be asserted when
+    // every mention the surface could not show is positively recognised prose —
+    // documentation genuinely cannot revoke access. The previous code-denylist
+    // form also fired for `.sql` migrations and `.prisma` schemas and told the
+    // model they "cannot revoke access", which is false: a constraint or
+    // trigger can. That biased the model toward agreeing with a wrong claim on
+    // a correct repository, on a blocker-capable check.
     supportingFacts.push({
       id: 'fact:lg006.no-code-cancellation-signal',
       statement:
-        'No code file in the repository references a customer.subscription.deleted (or updated-canceled) branch; any mentions found were in non-code files (documentation, comments or configuration), which cannot revoke access.',
+        'No source file in the repository references a customer.subscription.deleted (or updated-canceled) branch; the only mentions found were in non-code documentation files (Markdown or plain text), which cannot revoke access.',
       establishesVerdict: 'fail',
     });
   }
 
   const request: InferenceRequest = {
     checkId: 'LG-006',
-    // The elision disclosure rides here because `question` is transmitted
-    // verbatim while excerpt `note`s are not (see `elisionDisclosure`).
-    question: QUESTION + elisionDisclosure(elided),
+    // Both disclosures ride here because `question` is transmitted verbatim
+    // while excerpt `note`s are not (see `elisionDisclosure`).
+    question: QUESTION + elisionDisclosure(elided) + withheldNonSourceDisclosure(withheld.other.length),
     excerpts,
     responseSchema: RESPONSE_SCHEMA,
     supportingFacts,
@@ -357,7 +378,7 @@ export function surfaceLg006Candidates(fileset: Fileset): Lg006Candidates {
     handlerPaths: handlers.map((h) => h.path),
     hasCancellationBranch,
     hasCancellationSignalAnywhere,
-    hasCodeCancellationSignal,
+    hasSurfaceableCancellationSignal,
     handledEvents,
     request,
     anchors,
