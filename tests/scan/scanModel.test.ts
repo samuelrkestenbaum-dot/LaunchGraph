@@ -107,6 +107,21 @@ function delegatingCancellationRepo(): string {
   }).root;
 }
 
+/**
+ * A repo whose ONLY cancellation mention is prose in a non-code file. No code
+ * file handles cancellation, so `fact:lg006.no-code-cancellation-signal` is
+ * live and true — but the mention is enough to keep the deterministic blocker
+ * off, so the model is legitimately asked and can honestly disagree.
+ */
+function proseOnlySignalRepo(): string {
+  return makeRepo({
+    'package.json': NEXT_PKG,
+    'app/api/stripe/webhook/route.ts': HANDLER_NO_CANCELLATION,
+    'README.md': '# Billing\n\nWe handle customer.subscription.deleted by revoking access.\n',
+    '.env.production': PROD_ENV,
+  }).root;
+}
+
 function lg006(report: Report): Finding | undefined {
   return report.findings.find((f) => f.checkId === 'LG-006');
 }
@@ -255,7 +270,11 @@ describe('AT-06 — broken-lg-006 fixture, scanned offline', () => {
 
 describe('scanWithModel — fake-model integration (§4.2 online path)', () => {
   it('flows an inferred blocker FAIL from the model into the decision (not_ready)', async () => {
-    const dir = brokenCancellationRepo();
+    // Re-based onto the delegating repo: a handler-only-no-branch repo is now
+    // settled by the deterministic layer and never reaches the model. This is
+    // still a genuine inferred-fail — the model WAS shown lib/events.ts and
+    // judged that the branch does not reach a downgrade.
+    const dir = delegatingCancellationRepo();
     const report = await scanWithModel(dir, judgment('fail', 0.85), { now: FIXED });
     const finding = lg006(report);
     expect(finding?.outcome).toBe('fail');
@@ -278,7 +297,12 @@ describe('scanWithModel — fake-model integration (§4.2 online path)', () => {
   });
 
   it('classifies contradictory when a model PASS conflicts with the deterministic no-branch fact (fact wins)', async () => {
-    const dir = brokenCancellationRepo(); // no cancellation branch → fail-establishing fact
+    // Re-based onto a prose-only-signal repo: the ONLY cancellation mention is
+    // in a README, so no CODE file handles it, the fail-establishing fact is
+    // live and TRUE, and a model that says `pass` is genuinely contradicting
+    // it. (A repo with no mention anywhere is settled deterministically and is
+    // never offered to the model at all.)
+    const dir = proseOnlySignalRepo();
     const report = await scanWithModel(dir, judgment('pass', 0.85), { now: FIXED });
     const finding = lg006(report);
     // The DECIDED report has rule 5 applied, because the contradictory
@@ -301,9 +325,92 @@ describe('scanWithModel — fake-model integration (§4.2 online path)', () => {
   });
 
   it('reports remain schema-valid on both the fail and pass online paths (AT-25)', async () => {
+    // DISCLOSED MEANING CHANGE: `brokenCancellationRepo()` now exercises the
+    // DETERMINISTIC path (the model is never consulted), so this case proves
+    // schema validity of the settled finding under `scanWithModel`. The
+    // model-derived fail path is covered by the delegating case below.
     const fail = await scanWithModel(brokenCancellationRepo(), judgment('fail', 0.9), { now: FIXED });
     const pass = await scanWithModel(correctCancellationRepo(), judgment('pass', 0.6), { now: FIXED });
     expect(validateReport(fail).errors).toEqual([]);
     expect(validateReport(pass).errors).toEqual([]);
+    const inferredFail = await scanWithModel(delegatingCancellationRepo(), judgment('fail', 0.9), { now: FIXED });
+    expect(validateReport(inferredFail).errors).toEqual([]);
+  });
+});
+
+describe('A-S1c — the deterministic layer settles first, in BOTH paths (§4.1/§4.3)', () => {
+  /** A model that records calls, so "was it asked?" is directly observable. */
+  function spyModel(verdict: 'fail' | 'pass', confidence: number): FakeModelClient {
+    return new FakeModelClient({
+      'LG-006': (r: InferenceRequest): InferenceResult => ({
+        answer: { verdict, rationale: 'test rationale' },
+        confidence,
+        citedEvidence: [{ path: r.excerpts[0]!.path, startLine: r.excerpts[0]!.startLine }],
+      }),
+    });
+  }
+
+  it('T4/DC-3: a branch-absent repo is settled WITHOUT asking the model at all', async () => {
+    const model = spyModel('pass', 0.9);
+    const report = await scanWithModel(brokenCancellationRepo(), model, { now: FIXED });
+    const finding = lg006(report);
+    expect(finding?.outcome).toBe('fail');
+    expect(finding?.classification).toBe('confirmed');
+    expect(finding?.confidence).toBe(1);
+    expect(finding?.severity).toBe('blocker');
+    expect(report.decision.value).toBe('not_ready');
+    // §4.1 "the deterministic layer runs first, always" — and when it settles
+    // the question, no model result is produced, needed, or fabricated.
+    expect(model.requests).toHaveLength(0);
+    expect(validateReport(report).errors).toEqual([]);
+  });
+
+  it('T6: the branch-absent LG-006 finding is identical offline and online', async () => {
+    const dir = brokenCancellationRepo();
+    const offline = createScanner({ now: FIXED })(dir);
+    const online = await scanWithModel(dir, spyModel('pass', 0.9), { now: FIXED });
+    expect(lg006(online)).toEqual(lg006(offline));
+    expect(serializeReport(online)).toBe(serializeReport(offline));
+  });
+
+  it('T3/DC-2: the delegating repo + model PASS yields pass/inferred → ready_with_warnings', async () => {
+    const model = spyModel('pass', 0.8);
+    const report = await scanWithModel(delegatingCancellationRepo(), model, { now: FIXED });
+    const finding = lg006(report);
+    expect(finding?.outcome).toBe('pass');
+    expect(finding?.classification).toBe('inferred');
+    expect(report.decision.value).toBe('ready_with_warnings');
+    // The model WAS asked, and it was shown the delegated module.
+    expect(model.requests).toHaveLength(1);
+    expect(model.requests[0]?.excerpts.some((e) => e.path === 'lib/events.ts')).toBe(true);
+  });
+
+  it('T5/DC-4: a prose-only signal + model PASS is contradictory, fails, and fires Rule 5', async () => {
+    const model = spyModel('pass', 0.85);
+    const report = await scanWithModel(proseOnlySignalRepo(), model, { now: FIXED });
+    const finding = lg006(report);
+    expect(model.requests).toHaveLength(1);
+    // Never rendered as "LG-006: pass".
+    expect(finding?.outcome).toBe('fail');
+    expect(finding?.classification).toBe('requires_confirmation');
+    expect(report.decision.reasons.some((r) => r.startsWith('Rule 5:'))).toBe(true);
+    expect(report.counts.warnings).toBeGreaterThan(0);
+    expect(report.counts.blockers).toBe(0);
+    expect(report.decision.value).toBe('ready_with_warnings');
+    // AT-26: cite-or-discard guarantees evidence — verified, not assumed.
+    expect(finding?.evidence.length).toBeGreaterThan(0);
+    expect(validateReport(report).errors).toEqual([]);
+  });
+
+  it('DC-6: the README naming the event is never surfaced to the model (SEC-5 blast radius)', async () => {
+    const model = spyModel('pass', 0.85);
+    await scanWithModel(proseOnlySignalRepo(), model, { now: FIXED });
+    expect(model.requests[0]?.excerpts.every((e) => !e.path.endsWith('.md'))).toBe(true);
+  });
+
+  it('AT-23: two fixed-clock offline scans of the delegating repo are byte-identical', () => {
+    const dir = delegatingCancellationRepo();
+    const scan = createScanner({ now: FIXED });
+    expect(serializeReport(scan(dir))).toBe(serializeReport(scan(dir)));
   });
 });

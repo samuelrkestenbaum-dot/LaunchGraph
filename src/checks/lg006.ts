@@ -54,7 +54,7 @@
  * detector only surfaces excerpts (Layer D) and interprets an already-resolved
  * judgment.
  */
-import { fileLines } from '../scan/collect.js';
+import { fileLines, isCodeFile } from '../scan/collect.js';
 import type { CollectedFile, Fileset } from '../scan/collect.js';
 import { buildAbsenceEvidence, buildEvidence } from '../scan/redact.js';
 import { locateWebhookHandlers } from '../scan/webhook.js';
@@ -81,9 +81,48 @@ const RESPONSE_SCHEMA: ResponseSchemaDescriptor = {
 };
 
 const QUESTION =
-  'In the surfaced Stripe webhook handler, does the subscription-cancellation path ' +
+  'In the surfaced Stripe webhook handlers AND the surfaced delegated modules they hand events to, ' +
+  'does the subscription-cancellation path ' +
   '(customer.subscription.deleted, or customer.subscription.updated with a canceled status) ' +
-  'reach an entitlement downgrade or access removal?';
+  'reach an entitlement downgrade or access removal? ' +
+  'The handling need not be in the handler file itself — a handler that delegates to a module ' +
+  'which performs the downgrade satisfies this.';
+
+/**
+ * How many non-handler code files carrying a cancellation signal are surfaced
+ * alongside the handlers. Bounded so the prompt cannot grow with repo size; the
+ * elision is always disclosed rather than silent (SEC-7's honesty principle).
+ */
+const MAX_DELEGATED_EXCERPTS = 5;
+
+/**
+ * Discloses a capped surface to the MODEL.
+ *
+ * This has to ride on the question, not on an excerpt `note`: the SEC-5
+ * envelope (`buildUntrustedDataEnvelope`) transmits only each excerpt's
+ * `path:startLine-endLine (kind)` locator and its redacted text — `note` never
+ * reaches the model. A disclosure written into a note is visible to a human
+ * reading the request object and to nobody else, which is precisely where
+ * disclosure does not matter.
+ *
+ * The wording deliberately does NOT argue that many mentions imply the
+ * repository handles cancellation. Five files can all be ordinary UI copy
+ * carrying an analytics label while the real handler is the elided one, so the
+ * honest statement is that the surface is incomplete and silence is not
+ * evidence of absence.
+ */
+function elisionDisclosure(elided: number): string {
+  if (elided <= 0) return '';
+  return (
+    ` NOTE ON COMPLETENESS: ${elided} further code file(s) in this repository also reference subscription ` +
+    `cancellation but were NOT surfaced to you (at most ${MAX_DELEGATED_EXCERPTS} are included). ` +
+    'The code performing the entitlement downgrade may be in one of them. ' +
+    'Treat the surfaced set as incomplete: the absence of a downgrade in what you can see is not evidence that none exists.'
+  );
+}
+/** Window around the first matching line in a delegated file. */
+const WINDOW_BEFORE = 10;
+const WINDOW_AFTER = 30;
 
 /** How LG-006 presents a resolved model judgment as a §5 Finding. */
 const LG006_PRESENTATION: InferencePresentation = {
@@ -130,6 +169,15 @@ export interface Lg006Applicable {
    * cancellation correctly, and §7 gives Phase 1 no override mechanism.
    */
   hasCancellationSignalAnywhere: boolean;
+  /**
+   * Deterministic: a cancellation signal appears in at least one **code** file.
+   * Gates the fail-establishing supporting fact — when every mention is prose
+   * (README, agent spec, a SQL comment, a commented-out branch), the
+   * deterministic layer has a real and defensible opinion that nothing
+   * executable handles cancellation, and a model that answers `pass` is
+   * genuinely contradicting it.
+   */
+  hasCodeCancellationSignal: boolean;
   /** Dotted event names handled across all located handlers, deduplicated and sorted. */
   handledEvents: string[];
   /** The bounded request for the model layer (excerpts already redacted). */
@@ -190,6 +238,12 @@ export function surfaceLg006Candidates(fileset: Fileset): Lg006Candidates {
   // manufactures the same false blocker on path aliases, barrel re-exports and
   // multi-hop delegation, which are all ordinary Next.js shapes.
   const hasCancellationSignalAnywhere = fileset.files.some((f) => mentionsCancellationBranch(f.content));
+  // Narrower: only executable code counts. Prose that merely NAMES the event
+  // keeps the unappealable blocker off (above) but does not stop the
+  // deterministic layer from telling the model that nothing in code handles it.
+  const hasCodeCancellationSignal = fileset.files.some(
+    (f) => isCodeFile(f.path) && mentionsCancellationBranch(f.content),
+  );
   const handledEvents = enumerateEvents(handlers);
 
   // Per handler: the whole handler (context for the model), then — when that
@@ -236,19 +290,63 @@ export function surfaceLg006Candidates(fileset: Fileset): Lg006Candidates {
     );
   }
 
+  // The question is scoped to the REPOSITORY's cancellation handling, so the
+  // surface must follow the question rather than the handler file. A route that
+  // verifies and delegates keeps its branch in a lib module; surfacing only the
+  // handler asks the model about code it was never shown. Bounded, windowed,
+  // path-sorted (the collector's order) and CODE-ONLY — see `isCodeFile`, which
+  // is what keeps a scanned repo's README / agent specs out of the prompt.
+  const handlerPathSet = new Set(handlers.map((h) => h.path));
+  const delegated = fileset.files.filter(
+    (f) => !handlerPathSet.has(f.path) && isCodeFile(f.path) && mentionsCancellationBranch(f.content),
+  );
+  const surfaced = delegated.slice(0, MAX_DELEGATED_EXCERPTS);
+  const elided = delegated.length - surfaced.length;
+  surfaced.forEach((file, i) => {
+    const lines = fileLines(file);
+    const matchIdx = lines.findIndex((l) => SUB_DELETED_RE.test(l) || SUB_UPDATED_RE.test(l));
+    const anchorIdx = matchIdx >= 0 ? matchIdx : 0;
+    const start = Math.max(0, anchorIdx - WINDOW_BEFORE);
+    const end = Math.min(lines.length - 1, anchorIdx + WINDOW_AFTER);
+    const isLast = i === surfaced.length - 1;
+    const elisionNote =
+      isLast && elided > 0
+        ? ` ${elided} more code file(s) carrying a cancellation signal were not surfaced (cap: ${MAX_DELEGATED_EXCERPTS}).`
+        : '';
+    excerpts.push(
+      buildEvidence({
+        path: file.path,
+        startLine: start + 1,
+        endLine: end + 1,
+        rawExcerpt: lines.slice(start, end + 1).join('\n'),
+        kind: 'code',
+        note:
+          'Non-handler code file carrying a subscription-cancellation signal, surfaced because the webhook handler may delegate the downgrade to it.' +
+          elisionNote,
+      }),
+    );
+  });
+
   const supportingFacts: SupportingFact[] = [];
-  if (!hasCancellationBranch) {
+  if (!hasCodeCancellationSignal) {
+    // Deliberately CODE-scoped, not handler-scoped. The retired
+    // `fact:lg006.no-cancellation-branch` asserted a handler-file claim that was
+    // simply false on the delegating idiom, so a model answering correctly was
+    // marked contradictory against a wrong fact. This claim is true whenever it
+    // is emitted: nothing executable in the repository handles cancellation.
     supportingFacts.push({
-      id: 'fact:lg006.no-cancellation-branch',
+      id: 'fact:lg006.no-code-cancellation-signal',
       statement:
-        'No detected Stripe webhook handler has a customer.subscription.deleted (or updated-canceled) branch, so no cancellation path can reach an entitlement downgrade.',
+        'No code file in the repository references a customer.subscription.deleted (or updated-canceled) branch; any mentions found were in non-code files (documentation, comments or configuration), which cannot revoke access.',
       establishesVerdict: 'fail',
     });
   }
 
   const request: InferenceRequest = {
     checkId: 'LG-006',
-    question: QUESTION,
+    // The elision disclosure rides here because `question` is transmitted
+    // verbatim while excerpt `note`s are not (see `elisionDisclosure`).
+    question: QUESTION + elisionDisclosure(elided),
     excerpts,
     responseSchema: RESPONSE_SCHEMA,
     supportingFacts,
@@ -259,6 +357,7 @@ export function surfaceLg006Candidates(fileset: Fileset): Lg006Candidates {
     handlerPaths: handlers.map((h) => h.path),
     hasCancellationBranch,
     hasCancellationSignalAnywhere,
+    hasCodeCancellationSignal,
     handledEvents,
     request,
     anchors,
@@ -266,9 +365,27 @@ export function surfaceLg006Candidates(fileset: Fileset): Lg006Candidates {
 }
 
 /**
+ * True when the deterministic layer has already settled LG-006 and no model
+ * judgment can change the answer — either no webhook handler exists
+ * (`not_applicable`) or nothing in the repository handles cancellation
+ * (the Layer-D `fail`).
+ *
+ * Callers on the online path use this to skip the model call entirely: §4.1
+ * requires the deterministic layer to run first, and a settled check must not
+ * spend a model round-trip, must not surface repository text to a third party,
+ * and must not create the opportunity for a judgment to be applied where §4.3
+ * forbids it. `interpretLg006` enforces the same rule independently, so a
+ * caller that ignores this predicate still gets the correct finding.
+ */
+export function isLg006SettledDeterministically(candidates: Lg006Candidates): boolean {
+  return !candidates.applicable || !candidates.hasCancellationSignalAnywhere;
+}
+
+/**
  * Assembles the LG-006 Finding from surfaced candidates and an optional resolved
- * judgment. No judgment → `unknown` ("model layer disabled", AT-27). Judgment →
- * the pure D→M contract.
+ * judgment. The Layer-D disjunct is evaluated FIRST and a supplied judgment can
+ * never override it. Otherwise: no judgment → `unknown` ("model layer disabled",
+ * AT-27); judgment → the pure D→M contract.
  */
 export function interpretLg006(candidates: Lg006Candidates, judgment?: InferenceResult): Finding[] {
   if (!candidates.applicable) {
@@ -283,52 +400,54 @@ export function interpretLg006(candidates: Lg006Candidates, judgment?: Inference
     ];
   }
 
-  if (judgment === undefined) {
-    // LAYER-D DISJUNCT. No cancellation signal ANYWHERE in the repository
-    // settles the check by itself: nothing can route a cancellation to a
-    // downgrade, and reading event names proves it. This is a required
-    // deterministic signal, so with no model available it is emitted directly
-    // rather than allowed to evaporate into `unknown` — routing it through the
-    // model layer is precisely the substitution §4.3 forbids. AT-27 is
-    // untouched: no model result is produced, needed, or fabricated here, so
-    // its anti-fabrication clause is satisfied a fortiori.
-    //
-    // The gate is repo-wide, NOT handler-file-scoped. A route that verifies and
-    // delegates is the dominant idiom, and its cancellation branch lives in a
-    // lib module; a handler-file gate would emit this confirmed/1.0 blocker on
-    // a repository that is actually correct, which §7 leaves no way to appeal.
-    //
-    // (When a judgment IS available the D→M contract below still honours the
-    // narrower handler-file signal — it is carried as the `fail`-establishing
-    // supporting fact, and a model that disagrees is flagged `contradictory`
-    // rather than believed.)
-    if (!candidates.hasCancellationSignalAnywhere) {
-      const evidence: Evidence[] = [];
-      for (const anchor of candidates.anchors) {
-        evidence.push(anchor);
-        evidence.push(
-          buildAbsenceEvidence({
-            path: anchor.path,
-            note:
-              'Expected a customer.subscription.deleted (or customer.subscription.updated with a canceled status) ' +
-              'branch reachable from this handler; no subscription-cancellation handling was found anywhere in the repository.',
-          }),
-        );
-      }
-      return [
-        makeFinding({
-          checkId: 'LG-006',
-          seq: 1,
-          outcome: 'fail',
-          summary:
-            'No file in the repository handles subscription cancellation ' +
-            '(customer.subscription.deleted, or customer.subscription.updated with a canceled status), ' +
-            'so a cancellation can never reach an entitlement downgrade — canceled customers keep their access.',
-          evidence,
+  // LAYER-D DISJUNCT, evaluated BEFORE any judgment is consulted (§4.1: "the
+  // deterministic layer runs first, always"). No cancellation signal ANYWHERE
+  // in the repository settles the check by itself: nothing can route a
+  // cancellation to a downgrade, and reading event names proves it.
+  //
+  // The hoist above `judgment === undefined` is the point. Evaluating this only
+  // when no judgment exists lets a model decide a question the deterministic
+  // layer has already answered — precisely the substitution §4.3 forbids — and
+  // it is what allowed a model `pass` to overturn a required blocker online
+  // while the same repository scanned offline reported `fail`. Making the hoist
+  // conditional on `judgment === undefined` would restore that defect while
+  // leaving the suite green; it must stay unconditional.
+  //
+  // AT-27 is untouched: no model result is produced, needed, or fabricated in
+  // this branch, so its anti-fabrication clause is satisfied a fortiori.
+  //
+  // The gate is repo-wide, NOT handler-file-scoped. A route that verifies and
+  // delegates is the dominant idiom, and its cancellation branch lives in a
+  // lib module; a handler-file gate would emit this confirmed/1.0 blocker on
+  // a repository that is actually correct, which §7 leaves no way to appeal.
+  if (!candidates.hasCancellationSignalAnywhere) {
+    const evidence: Evidence[] = [];
+    for (const anchor of candidates.anchors) {
+      evidence.push(anchor);
+      evidence.push(
+        buildAbsenceEvidence({
+          path: anchor.path,
+          note:
+            'Expected a customer.subscription.deleted (or customer.subscription.updated with a canceled status) ' +
+            'branch reachable from this handler; no subscription-cancellation handling was found anywhere in the repository.',
         }),
-      ];
+      );
     }
+    return [
+      makeFinding({
+        checkId: 'LG-006',
+        seq: 1,
+        outcome: 'fail',
+        summary:
+          'No file in the repository handles subscription cancellation ' +
+          '(customer.subscription.deleted, or customer.subscription.updated with a canceled status), ' +
+          'so a cancellation can never reach an entitlement downgrade — canceled customers keep their access.',
+        evidence,
+      }),
+    ];
+  }
 
+  if (judgment === undefined) {
     // M-LAYER DISJUNCT, and the only one AT-27 binds: cancellation is handled
     // somewhere, but whether that path reaches a downgrade is unproven. Offline
     // / model unconfigured — the deterministic surface ran, but no model

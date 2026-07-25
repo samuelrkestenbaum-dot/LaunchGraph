@@ -282,3 +282,28 @@ export function collect(rootDir: string, options: CollectOptions = {}): Fileset 
 export function fileLines(file: CollectedFile): string[] {
   return file.content.split('\n');
 }
+
+/** Source-code file extensions this scanner reasons about. */
+const CODE_EXT_RE = /\.(?:ts|tsx|js|jsx|mjs|cjs)$/;
+
+/**
+ * True for a source-code file (by extension, case-insensitively).
+ *
+ * The shared predicate for the sites that currently consume it —
+ * `scan/webhook.ts` and `checks/lg006.ts`. It is **not yet** the single source
+ * of truth for the whole scanner: `checks/lg003.ts`, `checks/lg010.ts` and
+ * `checks/lg015.ts` still carry their own private `CODE_EXT_RE` copies.
+ * **Widening this regex (e.g. to add `.mts`) therefore does NOT widen those
+ * three checks** — they must be updated in the same change, or they will
+ * silently keep the narrower definition. Consolidating them is tracked as
+ * follow-up work.
+ *
+ * This is also a **security** boundary, not just a classification: detectors
+ * that surface repository text into a model prompt use it to guarantee that
+ * prose files — a scanned repo's `README.md`, `CLAUDE.md`, agent specs — are
+ * never fed to the model. The SEC-5 envelope fences untrusted text, but the
+ * correct bound is not to surface it at all.
+ */
+export function isCodeFile(path: string): boolean {
+  return CODE_EXT_RE.test(path.toLowerCase());
+}

@@ -26,18 +26,21 @@
  *   *Whether* a located handler is correct is each consuming check's question,
  *   never this module's.
  */
+import { isCodeFile } from './collect.js';
 import type { CollectedFile, Fileset } from './collect.js';
-
-const CODE_EXT_RE = /\.(?:ts|tsx|js|jsx|mjs|cjs)$/;
 
 /**
  * A code file that looks like a Stripe webhook handler by path: an
  * `app/api/**\/webhook*\/route.ts`-style App Router route or a `pages/api`
  * handler whose path mentions a webhook.
+ *
+ * The code-extension test comes from the shared `isCodeFile` — a private copy
+ * here would be a second answer to "is this code?", which is the drift the
+ * shared locator exists to prevent.
  */
 export function isWebhookHandler(path: string): boolean {
   const lower = path.toLowerCase();
-  if (!CODE_EXT_RE.test(lower)) return false;
+  if (!isCodeFile(lower)) return false;
   if (!lower.includes('webhook')) return false;
   return lower.includes('/api/') || lower.startsWith('api/') || lower.includes('route.') || lower.includes('pages/api');
 }

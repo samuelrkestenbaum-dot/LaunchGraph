@@ -37,7 +37,7 @@ import { detectLg008 } from '../checks/lg008.js';
 import { detectLg010 } from '../checks/lg010.js';
 import { detectLg014 } from '../checks/lg014.js';
 import { detectLg015 } from '../checks/lg015.js';
-import { interpretLg006, surfaceLg006Candidates } from '../checks/lg006.js';
+import { interpretLg006, isLg006SettledDeterministically, surfaceLg006Candidates } from '../checks/lg006.js';
 import { basename } from '../checks/detectorKit.js';
 import type { ModelClient } from '../model/client.js';
 import { collect } from './collect.js';
@@ -230,9 +230,14 @@ export async function scanWithModel(dir: string, model: ModelClient, options: Sc
   const fileset = collect(dir);
   const { supported, stack, facts } = detectStack(fileset);
   const candidates = surfaceLg006Candidates(fileset);
-  const lg006Findings = candidates.applicable
-    ? interpretLg006(candidates, await model.infer(candidates.request))
-    : interpretLg006(candidates);
+  // §4.1: the deterministic layer runs first, always. When it has settled the
+  // check, the model is not consulted at all — no round-trip, no repository
+  // text leaving the process, and no judgment in a position to override a
+  // required deterministic signal (§4.3).
+  const lg006Findings =
+    candidates.applicable && !isLg006SettledDeterministically(candidates)
+      ? interpretLg006(candidates, await model.infer(candidates.request))
+      : interpretLg006(candidates);
   const rawFindings = [...deterministicFindings(fileset), ...lg006Findings];
   return assembleReport(fileset, stack, facts, supported, rawFindings, now, checks);
 }
