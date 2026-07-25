@@ -139,8 +139,11 @@ inherit the false-fact defect still open on the first.
 - **DC-11 — eval unmoved.** `npm run eval` → **11 fixtures / 11-of-11 / 0 blocker
   false positives**. `fixtures/` tree object
   **`a981446bac76039147d93efedd14a092c2aeadc1`** byte-identical at both ends.
-- **DC-12 — AT-24 regression.** `fixtures/unsupported/`'s normalized report hash
-  (`9f6e2380a768126f` / 4204 bytes) **must not move** at either commit.
+- **DC-12 — AT-24 regression. AMENDED 2026-07-25 (see §13) — the original
+  hash-freeze was unsatisfiable.** `fixtures/unsupported/` grows by **exactly one**
+  LG-005 `not_applicable` finding and nothing else, and **AT-24 is asserted
+  directly rather than via a hash**: decision `not_evaluated`, CLI exit 3, the
+  Rule 1 reason string, `counts` unchanged, and zero blocker or warning findings.
 
 ## 3. In scope
 
@@ -453,6 +456,75 @@ adjudication, **AT-05 closure**, AT-06's model-assisted half, AT-16 `golden/`,
 AT-18/20/21/22 `hostile/`, and §9.3's 15/15-recall and 18/18-decision thresholds.
 
 ---
+
+## 13. AMENDMENTS — adjudicated mid-packet 2026-07-25
+
+The builder implemented Commit 2, hit two budget breaches, and **stopped per the
+contract instead of widening scope**. Both were real defects in this packet as
+shaped. Adjudicated and authorized by the main session; recorded here so the
+reviewer and archivist read the same rules the builder built to.
+
+### Amendment 1 — assertion budget for Commit 2: 3 → **5**
+
+Two further pre-existing assertions in `tests/scan/scanModel.test.ts` are
+authorized, both whole-report byte-identity claims that a **second** D+M check
+makes structurally impossible:
+
+- **`:333`** — `layerD` exclusion `f.checkId !== 'LG-006'` widens to
+  `['LG-006','LG-005']`. Same shape as the three mandated changes: the test's
+  claim is "layer-D findings are identical online vs offline", and LG-005 is D+M,
+  so excluding it **restores the assertion's original meaning** rather than
+  weakening it.
+- **`:377`** — `expect(serializeReport(online)).toBe(serializeReport(offline))` is
+  authorized for removal, **but NOT as a bare deletion.** The claim held only
+  because LG-006 was the sole model-assisted check *and* was deterministically
+  settled; a second D+M check that is never settled makes it false, and `counts`
+  is computed inside `decide()` so it cannot be filtered from outside. The real
+  claim is already carried by `expect(lg006(online)).toEqual(lg006(offline))`, and
+  byte-identity determinism remains covered by DC-10's fixed-clock pairs.
+  **Required replacement:** an assertion pinning *why* it no longer holds — that
+  the online/offline difference is confined to LG-005, specifically offline
+  `unknown`/`confirmed` vs online `inferred` at ≤0.9. This converts a lost
+  assertion into a documented behavioural boundary and fails if any *other* check
+  ever differs across the two paths, which is the property the original line was
+  really protecting.
+
+**Total Commit 2 budget: 5.** A sixth is still a STOP.
+
+### Amendment 2 — DC-12 was unsatisfiable as written
+
+DC-12 contradicted **§9's own sentence** "Everywhere else LG-005 emits
+`not_applicable`": any `not_applicable` finding lands in `report.findings` and
+moves the serialized hash. **All 11 hashes move, not 10.** `unsupported/` goes
+`5d9bad5e2a2d28f1`/4204 → `95b952ffae825bc9`/4569 purely by gaining one
+`not_applicable` finding, exactly as LG-006 already contributes.
+
+The builder was right to refuse the repair: giving LG-005 an unsupported-stack
+special case no other detector has would trade a cosmetic hash movement for a real
+inconsistency in detector behaviour. **AT-24's substance is fully intact** —
+decision `not_evaluated`, exit 3, Rule 1 reason, counts unchanged. DC-12 is
+restated as a direct behavioural assertion, which is a **stronger** check than a
+digest that moves for benign reasons.
+
+### Amendment 3 — the A-S1c receipt's hash column is not reproducible
+
+The builder's per-fixture **byte lengths match the A-S1c receipt exactly on all 11
+rows**, independently confirming nothing moved between A-S1c close and A-S2 start
+— but the **digests reproduce under no normalization variant tried** (`<ROOT>`,
+`<REPO_ROOT>`, `ROOT`, empty, raw, trailing-newline, dir-string; only `<ROOT>`
+yields the matching lengths). The receipt therefore records lengths from one
+convention and digests from another, and DC-12's original literal
+`9f6e2380a768126f` was not checkable as written.
+
+Receipts are append-only, so A-S1c is **not** edited. The correction is recorded
+in the A-S2 receipt. **Standing rule from here: publish the normalization
+convention alongside any hash table** — the baseline in use is sha256 of
+`serializeReport` with `report.repo.root` → `<ROOT>`, first 16 hex — so the next
+packet can actually check it.
+
+---
 _Shaped by the build-orchestrator on 2026-07-25 under the user's explicit go.
-Option (b): LG-005 with the minimum foundation folded in. Merge and PR remain hard
-stops with no target branch; no deploy, no secrets, no provider access._
+Option (b): LG-005 with the minimum foundation folded in. Amended mid-packet
+2026-07-25 (§13) after the builder correctly stopped on two budget breaches. Merge
+and PR remain hard stops with no target branch; no deploy, no secrets, no provider
+access._
