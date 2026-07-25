@@ -180,3 +180,66 @@ describe('surfaceDelegatedCandidates — the shared D→M delegated surface', ()
     expect(a.excerpts.map((e) => e.path)).toEqual(['lib/a.ts', 'lib/b.ts']);
   });
 });
+
+describe('surfaceDelegatedCandidates — the optional `prefers` ranking', () => {
+  const SPECIFIC = /idempoten/i;
+  const files = (): Record<string, string> => ({
+    'app/api/stripe/webhook/route.ts': HANDLER,
+    'app/a.ts': "await prisma.a.upsert({});\n",
+    'app/b.ts': "await prisma.b.upsert({});\n",
+    'app/c.ts': "await prisma.c.upsert({});\n",
+    'app/d.ts': "await prisma.d.upsert({});\n",
+    'app/e.ts': "await prisma.e.upsert({});\n",
+    'lib/guard.ts': "export const withIdempotency = () => {};\nawait prisma.x.upsert({});\n",
+  });
+  const selectsAny = (c: string): boolean => /upsert|idempoten/i.test(c);
+
+  it('WITHOUT `prefers`: path order fills the cap and the lib/ guard is discarded', () => {
+    const { fileset } = makeRepo(files());
+    const out = surfaceDelegatedCandidates(
+      fileset,
+      opts({ handlers: locateWebhookHandlers(fileset), selects: selectsAny, anchor: /upsert|idempoten/i }),
+    );
+    expect(out.excerpts.map((e) => e.path)).toEqual(['app/a.ts', 'app/b.ts', 'app/c.ts', 'app/d.ts', 'app/e.ts']);
+    expect(out.elided).toBe(1);
+  });
+
+  it('WITH `prefers`: the preferred band fills the cap first, and the guard survives', () => {
+    const { fileset } = makeRepo(files());
+    const out = surfaceDelegatedCandidates(
+      fileset,
+      opts({
+        handlers: locateWebhookHandlers(fileset),
+        selects: selectsAny,
+        anchor: /upsert|idempoten/i,
+        prefers: (c) => SPECIFIC.test(c),
+      }),
+    );
+    expect(out.excerpts.map((e) => e.path)).toEqual(['lib/guard.ts', 'app/a.ts', 'app/b.ts', 'app/c.ts', 'app/d.ts']);
+    expect(out.elided).toBe(1);
+  });
+
+  it('preserves path order WITHIN each band, so ranking cannot break AT-23', () => {
+    const { fileset } = makeRepo(files());
+    const out = surfaceDelegatedCandidates(
+      fileset,
+      opts({
+        handlers: locateWebhookHandlers(fileset),
+        selects: selectsAny,
+        anchor: /upsert|idempoten/i,
+        prefers: (c) => SPECIFIC.test(c),
+      }),
+    );
+    const generic = out.excerpts.map((e) => e.path).filter((p) => p.startsWith('app/'));
+    expect([...generic].sort()).toEqual(generic);
+  });
+
+  it('omitting `prefers` is byte-identical to passing one nothing matches (LG-006 is unaffected)', () => {
+    const { fileset } = makeRepo(files());
+    const base = opts({ handlers: locateWebhookHandlers(fileset), selects: selectsAny, anchor: /upsert|idempoten/i });
+    const without = surfaceDelegatedCandidates(fileset, base);
+    const withNoop = surfaceDelegatedCandidates(fileset, { ...base, prefers: () => false });
+    expect(withNoop.excerpts).toEqual(without.excerpts);
+    expect(withNoop.elided).toBe(without.elided);
+  });
+});

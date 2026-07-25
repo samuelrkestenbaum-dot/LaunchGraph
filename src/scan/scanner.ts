@@ -37,6 +37,7 @@ import { detectLg008 } from '../checks/lg008.js';
 import { detectLg010 } from '../checks/lg010.js';
 import { detectLg014 } from '../checks/lg014.js';
 import { detectLg015 } from '../checks/lg015.js';
+import { interpretLg005, surfaceLg005Candidates } from '../checks/lg005.js';
 import { interpretLg006, isLg006SettledDeterministically, surfaceLg006Candidates } from '../checks/lg006.js';
 import { basename } from '../checks/detectorKit.js';
 import type { ModelClient } from '../model/client.js';
@@ -210,7 +211,11 @@ export function createScanner(options: ScannerOptions = {}): (fixtureDir: string
   return (fixtureDir: string): Report => {
     const fileset = collect(fixtureDir);
     const { supported, stack, facts } = detectStack(fileset);
-    const rawFindings = [...deterministicFindings(fileset), ...interpretLg006(surfaceLg006Candidates(fileset))];
+    const rawFindings = [
+      ...deterministicFindings(fileset),
+      ...interpretLg006(surfaceLg006Candidates(fileset)),
+      ...interpretLg005(surfaceLg005Candidates(fileset)),
+    ];
     return assembleReport(fileset, stack, facts, supported, rawFindings, now, checks);
   };
 }
@@ -229,16 +234,36 @@ export async function scanWithModel(dir: string, model: ModelClient, options: Sc
   const checks = options.checks;
   const fileset = collect(dir);
   const { supported, stack, facts } = detectStack(fileset);
-  const candidates = surfaceLg006Candidates(fileset);
-  // §4.1: the deterministic layer runs first, always. When it has settled the
-  // check, the model is not consulted at all — no round-trip, no repository
+  // §11 `--checks`: a check excluded from the run must not ship repository text
+  // off-process. `assembleReport` filters excluded findings out of the decision
+  // anyway, so calling the model for one would leak a prompt to produce a
+  // finding that is then discarded. Invisible with a single model check; a real
+  // defect the moment there are two.
+  const selected = (checkId: string): boolean => checks === undefined || checks.includes(checkId);
+
+  // Model calls are SEQUENTIAL and in a fixed order — never `Promise.all`,
+  // which would make rejection ordering nondeterministic and put AT-23 at risk
+  // for a latency saving AT-28's <5-minute budget does not need.
+  //
+  // LG-006 runs first. §4.1: its deterministic layer settles some repositories
+  // outright, and a settled check is never asked — no round-trip, no repository
   // text leaving the process, and no judgment in a position to override a
-  // required deterministic signal (§4.3).
+  // required deterministic signal (§4.3). LG-005 has no such settled state
+  // (§3 assigns it candidates, not a verdict), so it is asked whenever a
+  // handler exists.
+  const lg006Candidates = surfaceLg006Candidates(fileset);
   const lg006Findings =
-    candidates.applicable && !isLg006SettledDeterministically(candidates)
-      ? interpretLg006(candidates, await model.infer(candidates.request))
-      : interpretLg006(candidates);
-  const rawFindings = [...deterministicFindings(fileset), ...lg006Findings];
+    selected('LG-006') && lg006Candidates.applicable && !isLg006SettledDeterministically(lg006Candidates)
+      ? interpretLg006(lg006Candidates, await model.infer(lg006Candidates.request))
+      : interpretLg006(lg006Candidates);
+
+  const lg005Candidates = surfaceLg005Candidates(fileset);
+  const lg005Findings =
+    selected('LG-005') && lg005Candidates.applicable
+      ? interpretLg005(lg005Candidates, await model.infer(lg005Candidates.request))
+      : interpretLg005(lg005Candidates);
+
+  const rawFindings = [...deterministicFindings(fileset), ...lg006Findings, ...lg005Findings];
   return assembleReport(fileset, stack, facts, supported, rawFindings, now, checks);
 }
 

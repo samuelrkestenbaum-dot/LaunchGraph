@@ -90,6 +90,23 @@ export interface DelegatedSurfaceOptions {
   note: string;
   /** Short noun phrase for the signal, used in the elision note (e.g. `cancellation signal`). */
   signalLabel: string;
+  /**
+   * Optional ranking. Selected files matching `prefers` fill the cap FIRST;
+   * the rest follow. Path order is preserved *within* each band, so the result
+   * stays a pure function of the tree (AT-23).
+   *
+   * This exists because a path-ordered cap is a **biased** sampler, not a
+   * random one. Repository layout puts `app/**` before `lib/**`, and guards
+   * live in `lib/**` — so when the cap binds it discards precisely the file
+   * that would exonerate the repository. On a blocker-capable model-assisted
+   * check that is not a sampling inefficiency, it is a false-blocker
+   * generator: the model is handed a surface from which the only available
+   * conclusion is the wrong one.
+   *
+   * Omitting `prefers` leaves selection and ordering exactly as they were, so
+   * a caller that does not rank is unaffected.
+   */
+  prefers?: (content: string) => boolean;
 }
 
 export interface DelegatedSurface {
@@ -115,8 +132,16 @@ export function surfaceDelegatedCandidates(fileset: Fileset, opts: DelegatedSurf
   const selected = fileset.files.filter(
     (f) => !handlerPaths.has(f.path) && isModelSurfaceableFile(f.path) && opts.selects(f.content),
   );
-  const surfaced = selected.slice(0, opts.cap);
-  const elided = selected.length - surfaced.length;
+  // Rank before capping, so a binding cap drops the least-relevant files rather
+  // than the ones latest in path order. `filter` preserves the collector's
+  // order, so each band stays path-sorted and the result is deterministic.
+  const prefers = opts.prefers;
+  const ranked =
+    prefers === undefined
+      ? selected
+      : [...selected.filter((f) => prefers(f.content)), ...selected.filter((f) => !prefers(f.content))];
+  const surfaced = ranked.slice(0, opts.cap);
+  const elided = ranked.length - surfaced.length;
 
   const excerpts: Evidence[] = [];
   surfaced.forEach((file, i) => {

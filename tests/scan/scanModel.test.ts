@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { runEvaluation } from '../../src/eval/harness.js';
+import { exitCodeForDecision, runEvaluation } from '../../src/eval/harness.js';
 import { FakeModelClient } from '../../src/model/fakeClient.js';
 import type { InferenceRequest, InferenceResult } from '../../src/model/client.js';
 import { serializeReport } from '../../src/report/serialize.js';
@@ -122,19 +122,33 @@ function proseOnlySignalRepo(): string {
   }).root;
 }
 
+function lg005(report: Report): Finding | undefined {
+  return report.findings.find((f) => f.checkId === 'LG-005');
+}
+
 function lg006(report: Report): Finding | undefined {
   return report.findings.find((f) => f.checkId === 'LG-006');
 }
 
+/**
+ * TRAP 4: `FakeModelClient.infer` REJECTS an unscripted check id, so from the
+ * moment LG-005 is wired into `scanWithModel` every construction in this file
+ * must script it too — otherwise an LG-005 rejection destroys the scan and
+ * surfaces as an LG-006 failure. One helper so a third model check cannot
+ * reintroduce the same trap piecemeal.
+ */
+function scriptFor(verdict: 'fail' | 'pass', confidence: number): Record<string, (r: InferenceRequest) => InferenceResult> {
+  const respond = (r: InferenceRequest): InferenceResult => ({
+    answer: { verdict, rationale: 'test rationale' },
+    confidence,
+    citedEvidence: [{ path: r.excerpts[0]!.path, startLine: r.excerpts[0]!.startLine }],
+  });
+  return { 'LG-006': respond, 'LG-005': respond };
+}
+
 /** A scripted judgment that cites the request's first surfaced excerpt. */
 function judgment(verdict: 'fail' | 'pass', confidence: number) {
-  const fake = new FakeModelClient({
-    'LG-006': (r: InferenceRequest): InferenceResult => ({
-      answer: { verdict, rationale: 'test rationale' },
-      confidence,
-      citedEvidence: [{ path: r.excerpts[0]!.path, startLine: r.excerpts[0]!.startLine }],
-    }),
-  });
+  const fake = new FakeModelClient(scriptFor(verdict, confidence));
   return fake;
 }
 
@@ -316,11 +330,15 @@ describe('scanWithModel — fake-model integration (§4.2 online path)', () => {
     expect(report.decision.value).toBe('ready_with_warnings');
   });
 
-  it('produces Layer-D findings byte-identical to the offline scan (only LG-006 differs)', async () => {
+  it('produces Layer-D findings byte-identical to the offline scan (only the model-assisted checks differ)', async () => {
     const dir = correctCancellationRepo();
     const offline = createScanner({ now: FIXED })(dir);
     const online = await scanWithModel(dir, judgment('pass', 0.8), { now: FIXED });
-    const layerD = (r: Report): Finding[] => r.findings.filter((f) => f.checkId !== 'LG-006');
+    // LG-005 is D+M like LG-006, so excluding it RESTORES this assertion's
+    // original meaning ("the deterministic layer does not move online") rather
+    // than weakening it.
+    const MODEL_ASSISTED = ['LG-006', 'LG-005'];
+    const layerD = (r: Report): Finding[] => r.findings.filter((f) => !MODEL_ASSISTED.includes(f.checkId));
     expect(layerD(online)).toEqual(layerD(offline));
   });
 
@@ -341,13 +359,7 @@ describe('scanWithModel — fake-model integration (§4.2 online path)', () => {
 describe('A-S1c — the deterministic layer settles first, in BOTH paths (§4.1/§4.3)', () => {
   /** A model that records calls, so "was it asked?" is directly observable. */
   function spyModel(verdict: 'fail' | 'pass', confidence: number): FakeModelClient {
-    return new FakeModelClient({
-      'LG-006': (r: InferenceRequest): InferenceResult => ({
-        answer: { verdict, rationale: 'test rationale' },
-        confidence,
-        citedEvidence: [{ path: r.excerpts[0]!.path, startLine: r.excerpts[0]!.startLine }],
-      }),
-    });
+    return new FakeModelClient(scriptFor(verdict, confidence));
   }
 
   it('T4/DC-3: a branch-absent repo is settled WITHOUT asking the model at all', async () => {
@@ -361,7 +373,7 @@ describe('A-S1c — the deterministic layer settles first, in BOTH paths (§4.1/
     expect(report.decision.value).toBe('not_ready');
     // §4.1 "the deterministic layer runs first, always" — and when it settles
     // the question, no model result is produced, needed, or fabricated.
-    expect(model.requests).toHaveLength(0);
+    expect(model.requests.filter((r) => r.checkId === 'LG-006')).toHaveLength(0);
     expect(validateReport(report).errors).toEqual([]);
   });
 
@@ -370,7 +382,23 @@ describe('A-S1c — the deterministic layer settles first, in BOTH paths (§4.1/
     const offline = createScanner({ now: FIXED })(dir);
     const online = await scanWithModel(dir, spyModel('pass', 0.9), { now: FIXED });
     expect(lg006(online)).toEqual(lg006(offline));
-    expect(serializeReport(online)).toBe(serializeReport(offline));
+    // This once asserted whole-report byte-identity. That held only because
+    // LG-006 was the SOLE model-assisted check and was deterministically
+    // settled here. LG-005 is never settled (§3 assigns it candidates, not a
+    // verdict), so the two paths must diverge — and the divergence reaches
+    // `report.counts`, which `decide()` computes, so it cannot be filtered out
+    // from the caller's side.
+    //
+    // Pin the boundary instead of dropping the claim: the divergence is
+    // confined to LG-005, and it is exactly the expected D→M difference. This
+    // now FAILS if any other check ever starts differing across the two paths,
+    // which is the property the byte-identity line was really protecting.
+    const exceptLg005 = (r: Report): Finding[] => r.findings.filter((f) => f.checkId !== 'LG-005');
+    expect(exceptLg005(online)).toEqual(exceptLg005(offline));
+    expect(lg005(offline)?.outcome).toBe('unknown');
+    expect(lg005(offline)?.classification).toBe('confirmed');
+    expect(lg005(online)?.classification).toBe('inferred');
+    expect(lg005(online)?.confidence).toBeLessThanOrEqual(0.9);
   });
 
   it('T3/DC-2: the delegating repo + model PASS yields pass/inferred → ready_with_warnings', async () => {
@@ -381,15 +409,16 @@ describe('A-S1c — the deterministic layer settles first, in BOTH paths (§4.1/
     expect(finding?.classification).toBe('inferred');
     expect(report.decision.value).toBe('ready_with_warnings');
     // The model WAS asked, and it was shown the delegated module.
-    expect(model.requests).toHaveLength(1);
-    expect(model.requests[0]?.excerpts.some((e) => e.path === 'lib/events.ts')).toBe(true);
+    const lg006Requests = model.requests.filter((r) => r.checkId === 'LG-006');
+    expect(lg006Requests).toHaveLength(1);
+    expect(lg006Requests[0]?.excerpts.some((e) => e.path === 'lib/events.ts')).toBe(true);
   });
 
   it('T5/DC-4: a prose-only signal + model PASS is contradictory, fails, and fires Rule 5', async () => {
     const model = spyModel('pass', 0.85);
     const report = await scanWithModel(proseOnlySignalRepo(), model, { now: FIXED });
     const finding = lg006(report);
-    expect(model.requests).toHaveLength(1);
+    expect(model.requests.filter((r) => r.checkId === 'LG-006')).toHaveLength(1);
     // Never rendered as "LG-006: pass".
     expect(finding?.outcome).toBe('fail');
     expect(finding?.classification).toBe('requires_confirmation');
@@ -411,6 +440,145 @@ describe('A-S1c — the deterministic layer settles first, in BOTH paths (§4.1/
   it('AT-23: two fixed-clock offline scans of the delegating repo are byte-identical', () => {
     const dir = delegatingCancellationRepo();
     const scan = createScanner({ now: FIXED });
+    expect(serializeReport(scan(dir))).toBe(serializeReport(scan(dir)));
+  });
+});
+
+describe('A-S2 — LG-005 wiring, --checks suppression and model-call discipline', () => {
+  function spy(verdict: 'fail' | 'pass', confidence: number): FakeModelClient {
+    return new FakeModelClient(scriptFor(verdict, confidence));
+  }
+  const idsOf = (m: FakeModelClient): string[] => m.requests.map((r) => r.checkId);
+
+  it('DC-9: `--checks` excluding LG-005 makes ZERO LG-005 infer calls', async () => {
+    // An excluded check's findings are filtered out of the decision anyway, so
+    // calling the model for one would ship repository text off-process to
+    // produce a finding that is then discarded.
+    const model = spy('fail', 0.9);
+    await scanWithModel(delegatingCancellationRepo(), model, { now: FIXED, checks: ['LG-006'] });
+    expect(idsOf(model)).not.toContain('LG-005');
+    expect(idsOf(model)).toContain('LG-006');
+  });
+
+  it('DC-9: `--checks` excluding LG-006 makes ZERO LG-006 infer calls', async () => {
+    const model = spy('fail', 0.9);
+    await scanWithModel(delegatingCancellationRepo(), model, { now: FIXED, checks: ['LG-005'] });
+    expect(idsOf(model)).not.toContain('LG-006');
+    expect(idsOf(model)).toContain('LG-005');
+  });
+
+  it('DC-9: `--checks` naming no model check at all makes ZERO infer calls', async () => {
+    const model = spy('fail', 0.9);
+    await scanWithModel(delegatingCancellationRepo(), model, { now: FIXED, checks: ['LG-001'] });
+    expect(model.requests).toHaveLength(0);
+  });
+
+  it('DC-10/TRAP 6: model calls are SEQUENTIAL in a fixed order, and two runs are byte-identical', async () => {
+    const a = spy('pass', 0.8);
+    const b = spy('pass', 0.8);
+    const dir = delegatingCancellationRepo();
+    const first = await scanWithModel(dir, a, { now: FIXED });
+    const second = await scanWithModel(dir, b, { now: FIXED });
+    expect(serializeReport(first)).toBe(serializeReport(second));
+    // A fixed check-id order — not `Promise.all`, whose rejection ordering is
+    // nondeterministic and would put AT-23 at risk.
+    expect(idsOf(a)).toEqual(idsOf(b));
+    expect(idsOf(a)).toEqual(['LG-006', 'LG-005']);
+  });
+
+  it('flows an LG-005 inferred blocker FAIL into the decision (first pure-model blocker)', async () => {
+    const report = await scanWithModel(delegatingCancellationRepo(), spy('fail', 0.85), { now: FIXED });
+    const finding = lg005(report);
+    expect(finding?.outcome).toBe('fail');
+    expect(finding?.classification).toBe('inferred');
+    expect(finding?.severity).toBe('blocker');
+    expect(finding?.externalVerification).toBeUndefined();
+    expect(report.decision.value).toBe('not_ready');
+    expect(validateReport(report).errors).toEqual([]);
+  });
+
+  it('LG-005 offline is `unknown`, which holds the ceiling and is never a blocker', () => {
+    const report = createScanner({ now: FIXED })(delegatingCancellationRepo());
+    const finding = lg005(report);
+    expect(finding?.outcome).toBe('unknown');
+    expect(finding?.summary).toContain('Model layer disabled');
+    expect(report.counts.blockers).toBe(0);
+    expect(report.decision.value).toBe('ready_with_warnings');
+  });
+
+  it('TRAP 5 (pinned, not fixed): a model-client error propagates and fails the whole scan', async () => {
+    // With two model checks a single client error now destroys BOTH findings
+    // and the report. Per-check degradation to `unknown` is the right product
+    // behaviour but is deliberately out of scope here — pinning the current
+    // semantics keeps it a known state rather than an accidental one.
+    const onlyLg006 = new FakeModelClient({
+      'LG-006': (r: InferenceRequest): InferenceResult => ({
+        answer: { verdict: 'pass', rationale: 'r' },
+        confidence: 0.8,
+        citedEvidence: [{ path: r.excerpts[0]!.path, startLine: r.excerpts[0]!.startLine }],
+      }),
+    });
+    await expect(scanWithModel(delegatingCancellationRepo(), onlyLg006, { now: FIXED })).rejects.toThrow(/LG-005/);
+  });
+
+  it('DC-6: no non-source file reaches ANY model request, across both checks', async () => {
+    const model = spy('pass', 0.8);
+    const dir = makeRepo({
+      'package.json': NEXT_PKG,
+      'app/api/stripe/webhook/route.ts': HANDLER_DELEGATING,
+      'lib/events.ts': EVENTS_MODULE,
+      'lib/idempotency.mts': 'export async function alreadyProcessed(id: string) { return db.processedEvents.has(id); }\n',
+      'migrations/001.sql': 'CREATE UNIQUE INDEX ON processed_events (event_id);\n',
+      'prisma/schema.prisma': 'model ProcessedEvent { id String @id }\n',
+      'README.md': 'customer.subscription.deleted and event.id dedup\n',
+      '.env.production': PROD_ENV,
+    }).root;
+    await scanWithModel(dir, model, { now: FIXED });
+    const allowed = new Set(['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'mts', 'cts']);
+    for (const req of model.requests) {
+      for (const e of req.excerpts) {
+        expect(allowed.has(e.path.split('.').pop() ?? ''), `${req.checkId}: ${e.path}`).toBe(true);
+      }
+    }
+    // ...and the withheld non-source files are disclosed to LG-005, which is
+    // the check for which a unique constraint is a canonical correct guard.
+    const lg005Req = model.requests.find((r) => r.checkId === 'LG-005');
+    expect(lg005Req?.question).toMatch(/non-source file/i);
+  });
+});
+
+describe('AT-24 (amended DC-12) — the unsupported stack, asserted behaviourally not by hash', () => {
+  const report = (): Report => createScanner({ now: FIXED })(join(fixturesRoot, 'unsupported'));
+
+  it('grows by exactly ONE LG-005 not_applicable finding and nothing else', () => {
+    const findings = report().findings;
+    const lg005Findings = findings.filter((f) => f.checkId === 'LG-005');
+    expect(lg005Findings).toHaveLength(1);
+    expect(lg005Findings[0]?.outcome).toBe('not_applicable');
+    // Severity comes from the registry via makeFinding, never hardcoded.
+    expect(lg005Findings[0]?.severity).toBe('blocker');
+    expect(lg005Findings[0]?.evidence).toEqual([]);
+    expect(lg005Findings[0]?.externalVerification).toBeUndefined();
+  });
+
+  it('keeps AT-24 itself intact: not_evaluated, exit 3, Rule 1, counts unchanged, no fail/warning', () => {
+    // The A-S1c-era hash for this fixture necessarily moves once a tenth check
+    // emits a finding here. AT-24's real claim is behavioural, so it is
+    // asserted directly — a stronger check than a digest that moves for benign
+    // reasons.
+    const r = report();
+    expect(r.decision.value).toBe('not_evaluated');
+    expect(exitCodeForDecision(r.decision.value)).toBe(3);
+    expect(r.decision.reasons.some((x) => x.startsWith('Rule 1:'))).toBe(true);
+    expect(r.decision.reasons.some((x) => x.includes('unsupported stack'))).toBe(true);
+    expect(r.counts).toEqual({ blockers: 0, warnings: 0, unknowns: 1 });
+    expect(r.findings.filter((f) => f.outcome === 'fail' || f.outcome === 'warning')).toEqual([]);
+    expect(validateReport(r).errors).toEqual([]);
+  });
+
+  it('stays byte-identical across two fixed-clock scans (AT-23 on the unsupported path)', () => {
+    const scan = createScanner({ now: FIXED });
+    const dir = join(fixturesRoot, 'unsupported');
     expect(serializeReport(scan(dir))).toBe(serializeReport(scan(dir)));
   });
 });
