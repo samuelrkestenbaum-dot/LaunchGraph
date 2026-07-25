@@ -15,6 +15,8 @@
  * - **Contradiction (rule 4).** When the model verdict disagrees with a
  *   supporting fact that establishes a verdict, the deterministic fact wins and
  *   the finding is `contradictory`; otherwise the finding is `inferred`.
+ *   A contradictory finding's OUTCOME is forced to `fail`, whatever the model
+ *   said — see {@link runInferenceContract}.
  *
  * The §6.1 blocker-downgrade (inferred blocker fail with confidence < 0.7 →
  * `requires_confirmation`) is NOT applied here — the detector emits `inferred`
@@ -32,7 +34,13 @@ export const MODEL_CONFIDENCE_CAP = 0.9;
 export interface InferencePresentation {
   /** 1-based sequence within the check for the finding id. */
   seq: number;
-  /** Maps the model verdict to the check's `CheckOutcome`. */
+  /**
+   * Maps the model verdict to the check's `CheckOutcome`.
+   *
+   * Consulted **only for non-contradictory judgments**. A `contradictory`
+   * judgment always carries outcome `fail` (the deterministic fact won), so
+   * this mapper is bypassed entirely in that case.
+   */
   outcomeForVerdict: (verdict: 'fail' | 'pass') => CheckOutcome;
   /** Builds the one-sentence §5 summary for the resolved judgment. */
   summarize: (ctx: {
@@ -96,6 +104,19 @@ function classifyAgainstFacts(
  * Runs the D→M contract over a resolved result and builds the §5 Finding via
  * `makeFinding` (severity from the registry). Returns `no_usable_judgment` when
  * the model cited nothing present in the surfaced excerpts.
+ *
+ * **A contradictory judgment always yields outcome `fail`.** §7 rule 5 routes
+ * contradictory findings on blocker-capable checks to rule-4 treatment
+ * (`requires_confirmation`, counted as a warning, listed under "needs your
+ * confirmation"), and the engine selects them with
+ * `outcome === 'fail' && classification === 'contradictory'`. A contradictory
+ * *pass* carrying outcome `pass` therefore fired NO rule at all, and the human
+ * report rendered it as a plain pass — on precisely the repositories where the
+ * deterministic layer holds evidence to the contrary. Forcing the outcome is
+ * what makes the disagreement visible to the §7 rules.
+ *
+ * This cannot manufacture a blocker: rule 2 requires `confirmed` and rule 3
+ * requires `inferred`, so a `contradictory` fail can only ever reach rule 5.
  */
 export function runInferenceContract(
   request: InferenceRequest,
@@ -114,10 +135,14 @@ export function runInferenceContract(
   const { classification, contradictedFact } = classifyAgainstFacts(request, result);
   const verdict = result.answer.verdict;
 
+  // The deterministic fact won, so the finding reports a failure regardless of
+  // the model's verdict; `outcomeForVerdict` is bypassed, not overridden.
+  const outcome: CheckOutcome = classification === 'contradictory' ? 'fail' : presentation.outcomeForVerdict(verdict);
+
   const finding = makeFinding({
     checkId: request.checkId,
     seq: presentation.seq,
-    outcome: presentation.outcomeForVerdict(verdict),
+    outcome,
     summary: presentation.summarize({ verdict, classification, rationale: result.answer.rationale, contradictedFact }),
     evidence,
     classification,

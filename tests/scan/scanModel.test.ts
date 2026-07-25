@@ -281,7 +281,13 @@ describe('scanWithModel — fake-model integration (§4.2 online path)', () => {
     const dir = brokenCancellationRepo(); // no cancellation branch → fail-establishing fact
     const report = await scanWithModel(dir, judgment('pass', 0.85), { now: FIXED });
     const finding = lg006(report);
-    expect(finding?.classification).toBe('contradictory');
+    // The DECIDED report has rule 5 applied, because the contradictory
+    // finding's outcome is now `fail` (C1). Before C1 the outcome was `pass`,
+    // no rule fired, and the report rendered "LG-006: pass".
+    expect(finding?.classification).toBe('requires_confirmation');
+    expect(finding?.outcome).toBe('fail');
+    expect(report.decision.reasons.some((r) => r.startsWith('Rule 5:'))).toBe(true);
+    expect(report.counts.warnings).toBeGreaterThan(0);
     // Contradictory on a blocker-capable check is treated as rule 4/5, not not_ready.
     expect(report.decision.value).toBe('ready_with_warnings');
   });
