@@ -1,0 +1,8 @@
+{
+  "_comment": "Seeds exactly LG-006: app/api/stripe/webhook/route.ts handles checkout.session.completed and invoice.paid but never branches on subscription cancellation (neither the deleted lifecycle event nor an updated event carrying a cancelled status — those names are deliberately absent from the fixture's own files, comments included, because the Layer-D detector reads raw file content), so a cancellation can never reach an entitlement downgrade. This is the DETERMINISTIC half of AT-06 — a fully missing branch is a Layer-D signal, so the blocker stands under --offline with classification 'confirmed'; the model-assisted half (a branch that exists but never downgrades) is proven by the FakeModelClient integration tests, not by a fixture. Distractors keeping every other check clean: the handler DOES verify the signature via stripe.webhooks.constructEvent (LG-004 passes), lib/stripe.ts reads the key from process.env with no committed literal (LG-002), .env.production declares a single canonical https origin and there is no .env.preview (LG-001/LG-008/LG-015), and app/api/checkout/route.ts supplies the subscription-mode usage that makes LG-003 applicable and passing (the webhook route is present).",
+  "decision": "not_ready",
+  "exitCode": 1,
+  "findings": [
+    { "checkId": "LG-006", "outcome": "fail", "evidencePathContains": ["webhook/route.ts"] }
+  ]
+}

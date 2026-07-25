@@ -1,31 +1,53 @@
 /**
  * LG-006 — Missing cancellation handling (§3, Layer D+M, External = No).
  *
- * The question: in the Stripe webhook handler, does the subscription-cancellation
+ * The question: in the Stripe webhook handlers, does the subscription-cancellation
  * path (`customer.subscription.deleted`, or `customer.subscription.updated` with
  * a canceled status) reach an entitlement downgrade / access removal? A missing
  * branch, or a branch that never downgrades, fails as a blocker.
  *
+ * §3 makes this a **disjunction across two layers**, and the two disjuncts are
+ * answered by different machinery:
+ *
+ * | Case | Layer | Outcome |
+ * |---|---|---|
+ * | No cancellation signal anywhere in the REPO | **D** — deterministic event-name detection | `fail`, `confirmed`, 1.0, blocker — stands under `--offline` |
+ * | Cancellation handled somewhere, downgrade unproven | **M** — model-assisted path confirmation | model → `inferred` fail/pass (cap 0.9) or `contradictory`; `--offline`/unconfigured → `unknown` |
+ * | No webhook handler at all | D | `not_applicable` (LG-003 owns the missing handler) |
+ *
+ * The first row is scoped to the REPOSITORY, not to the handler file. A route
+ * that verifies the signature and delegates (`await handleStripeEvent(event)`)
+ * keeps its cancellation branch in a lib module, and that is the dominant
+ * Next.js/Stripe shape. Gating an unappealable `confirmed` blocker on
+ * handler-file absence would fail correct repositories.
+ *
+ * §4.3 is what forces the first row: *"A check may not silently substitute
+ * model judgment where the spec requires a deterministic signal."* A fully
+ * missing branch is settled by reading event names — offering it to the model
+ * is exactly the substitution §4.3 forbids, and it made a required blocker
+ * evaporate under `--offline`.
+ *
  * Two pure functions, split along the §4 layer boundary:
  *
- * - {@link surfaceLg006Candidates} — **Layer D.** Locates the Stripe webhook
- *   handler (the SAME handler LG-004 locates, but asking a different question —
- *   this never evaluates signature verification, so LG-004 and LG-006 do not
- *   overlap), enumerates handled event names, deterministically detects whether
- *   a cancellation branch exists, and gathers the redacted handler excerpts +
- *   the bounded question + any deterministic supporting facts into an
- *   `InferenceRequest`. No webhook handler at all → a terminal `not_applicable`
- *   signal (LG-003 owns the *missing handler*; LG-006 is non-external and
- *   attaches no external marker).
+ * - {@link surfaceLg006Candidates} — **Layer D.** Locates EVERY Stripe webhook
+ *   handler via the shared locator (the SAME set LG-004 locates, but asking a
+ *   different question — this never evaluates signature verification, so LG-004
+ *   and LG-006 do not overlap), enumerates handled event names, deterministically
+ *   detects whether a cancellation branch exists in any of them, and gathers the
+ *   redacted handler excerpts + the bounded question + any deterministic
+ *   supporting facts into an `InferenceRequest`. No webhook handler at all → a
+ *   terminal `not_applicable` signal (LG-003 owns the *missing handler*; LG-006
+ *   is non-external and attaches no external marker).
  *
- * - {@link interpretLg006} — assembles the §5 Finding. No judgment
- *   (offline / model unconfigured) → outcome `unknown` with the reason
- *   "model layer disabled" (AT-27), no external marker. Judgment present → the
- *   pure D→M contract (`inference.ts`) → `inferred` fail/pass (or `contradictory`
- *   on disagreement), confidence capped at 0.9, severity `blocker` from the
- *   registry. The detector NEVER downgrades a low-confidence inferred blocker to
- *   `requires_confirmation` — it emits `inferred` and lets the §7 engine (rule 4)
- *   reclassify.
+ * - {@link interpretLg006} — assembles the §5 Finding. Branch absent → the
+ *   Layer-D `fail` above, with no model result produced, needed or fabricated.
+ *   Otherwise, no judgment (offline / model unconfigured) → outcome `unknown`
+ *   with the reason "model layer disabled" (AT-27), no external marker; judgment
+ *   present → the pure D→M contract (`inference.ts`) → `inferred` fail/pass (or
+ *   `contradictory` on disagreement), confidence capped at 0.9, severity
+ *   `blocker` from the registry. The detector NEVER downgrades a low-confidence
+ *   inferred blocker to `requires_confirmation` — it emits `inferred` and lets
+ *   the §7 engine (rule 4) reclassify.
  *
  * Layer M is EMIT-ONLY here: this file calls no model client and opens no
  * network. The async model call lives in the online scanner composition; this
@@ -34,7 +56,7 @@
  */
 import { fileLines } from '../scan/collect.js';
 import type { CollectedFile, Fileset } from '../scan/collect.js';
-import { buildEvidence } from '../scan/redact.js';
+import { buildAbsenceEvidence, buildEvidence } from '../scan/redact.js';
 import { locateWebhookHandlers } from '../scan/webhook.js';
 import type { Evidence, Finding } from '../schema/index.js';
 import type { InferenceRequest, InferenceResult, ResponseSchemaDescriptor, SupportingFact } from '../model/client.js';
@@ -92,9 +114,22 @@ export interface Lg006Applicable {
   handlerPaths: string[];
   /**
    * Deterministic: a customer.subscription.deleted / updated-canceled branch
-   * exists in AT LEAST ONE located handler.
+   * exists in AT LEAST ONE located handler FILE. Drives what is offered to the
+   * model layer (the focused branch excerpt and the fail-establishing
+   * supporting fact) — NOT the deterministic blocker, which needs the wider
+   * {@link hasCancellationSignalAnywhere}.
    */
   hasCancellationBranch: boolean;
+  /**
+   * Deterministic: a cancellation signal appears ANYWHERE in the repository,
+   * not merely inside a handler file. This — not `hasCancellationBranch` — is
+   * what gates the confirmed blocker, because the dominant idiom is a route
+   * that verifies and delegates (`await handleStripeEvent(event)`) with the
+   * switch living in a lib module. Gating on handler-file absence would emit
+   * `fail`/`confirmed`/1.0 → `not_ready` on a repository that handles
+   * cancellation correctly, and §7 gives Phase 1 no override mechanism.
+   */
+  hasCancellationSignalAnywhere: boolean;
   /** Dotted event names handled across all located handlers, deduplicated and sorted. */
   handledEvents: string[];
   /** The bounded request for the model layer (excerpts already redacted). */
@@ -122,8 +157,8 @@ function enumerateEvents(handlers: readonly CollectedFile[]): string[] {
   return [...events].sort();
 }
 
-/** Deterministic: does THIS handler branch on subscription cancellation? */
-function handlerHasCancellationBranch(content: string): boolean {
+/** Deterministic: does THIS file carry a subscription-cancellation signal? */
+function mentionsCancellationBranch(content: string): boolean {
   const hasDeleted = SUB_DELETED_RE.test(content);
   const hasUpdatedCanceled = SUB_UPDATED_RE.test(content) && CANCELED_STATUS_RE.test(content);
   return hasDeleted || hasUpdatedCanceled;
@@ -146,7 +181,15 @@ export function surfaceLg006Candidates(fileset: Fileset): Lg006Candidates {
     return { applicable: false };
   }
 
-  const hasCancellationBranch = handlers.some((h) => handlerHasCancellationBranch(h.content));
+  const hasCancellationBranch = handlers.some((h) => mentionsCancellationBranch(h.content));
+  // Deliberately the WHOLE fileset, not just handlers and not just code files.
+  // The blocker below is unappealable, so its gate is the widest signal we can
+  // read: any file mentioning cancellation handling suppresses it. That
+  // under-warns (a README naming the event is enough), which is the safe
+  // direction; the alternative — resolving imports out of the handler — still
+  // manufactures the same false blocker on path aliases, barrel re-exports and
+  // multi-hop delegation, which are all ordinary Next.js shapes.
+  const hasCancellationSignalAnywhere = fileset.files.some((f) => mentionsCancellationBranch(f.content));
   const handledEvents = enumerateEvents(handlers);
 
   // Per handler: the whole handler (context for the model), then — when that
@@ -169,7 +212,7 @@ export function surfaceLg006Candidates(fileset: Fileset): Lg006Candidates {
       }),
     );
     const branchIdx = lines.findIndex((l) => SUB_DELETED_RE.test(l) || SUB_UPDATED_RE.test(l));
-    if (handlerHasCancellationBranch(handler.content) && branchIdx > 0) {
+    if (mentionsCancellationBranch(handler.content) && branchIdx > 0) {
       excerpts.push(
         buildEvidence({
           path: handler.path,
@@ -215,6 +258,7 @@ export function surfaceLg006Candidates(fileset: Fileset): Lg006Candidates {
     applicable: true,
     handlerPaths: handlers.map((h) => h.path),
     hasCancellationBranch,
+    hasCancellationSignalAnywhere,
     handledEvents,
     request,
     anchors,
@@ -240,18 +284,66 @@ export function interpretLg006(candidates: Lg006Candidates, judgment?: Inference
   }
 
   if (judgment === undefined) {
-    // Offline / model unconfigured: the deterministic surface ran, but no model
-    // judgment is available — report unknown with the documented reason (AT-27),
-    // no external marker. The `confirmed`/1.0 classification describes the
-    // deterministic surface (a handler WAS located); the `unknown` OUTCOME is
-    // what carries "we could not evaluate the cancellation path".
+    // LAYER-D DISJUNCT. No cancellation signal ANYWHERE in the repository
+    // settles the check by itself: nothing can route a cancellation to a
+    // downgrade, and reading event names proves it. This is a required
+    // deterministic signal, so with no model available it is emitted directly
+    // rather than allowed to evaporate into `unknown` — routing it through the
+    // model layer is precisely the substitution §4.3 forbids. AT-27 is
+    // untouched: no model result is produced, needed, or fabricated here, so
+    // its anti-fabrication clause is satisfied a fortiori.
+    //
+    // The gate is repo-wide, NOT handler-file-scoped. A route that verifies and
+    // delegates is the dominant idiom, and its cancellation branch lives in a
+    // lib module; a handler-file gate would emit this confirmed/1.0 blocker on
+    // a repository that is actually correct, which §7 leaves no way to appeal.
+    //
+    // (When a judgment IS available the D→M contract below still honours the
+    // narrower handler-file signal — it is carried as the `fail`-establishing
+    // supporting fact, and a model that disagrees is flagged `contradictory`
+    // rather than believed.)
+    if (!candidates.hasCancellationSignalAnywhere) {
+      const evidence: Evidence[] = [];
+      for (const anchor of candidates.anchors) {
+        evidence.push(anchor);
+        evidence.push(
+          buildAbsenceEvidence({
+            path: anchor.path,
+            note:
+              'Expected a customer.subscription.deleted (or customer.subscription.updated with a canceled status) ' +
+              'branch reachable from this handler; no subscription-cancellation handling was found anywhere in the repository.',
+          }),
+        );
+      }
+      return [
+        makeFinding({
+          checkId: 'LG-006',
+          seq: 1,
+          outcome: 'fail',
+          summary:
+            'No file in the repository handles subscription cancellation ' +
+            '(customer.subscription.deleted, or customer.subscription.updated with a canceled status), ' +
+            'so a cancellation can never reach an entitlement downgrade — canceled customers keep their access.',
+          evidence,
+        }),
+      ];
+    }
+
+    // M-LAYER DISJUNCT, and the only one AT-27 binds: cancellation is handled
+    // somewhere, but whether that path reaches a downgrade is unproven. Offline
+    // / model unconfigured — the deterministic surface ran, but no model
+    // judgment is available, so report unknown with the documented reason
+    // (AT-27), no external marker. The `confirmed`/1.0 classification describes
+    // the deterministic surface (a handler WAS located and the repository DOES
+    // reference cancellation handling); the `unknown` OUTCOME is what carries
+    // "we could not confirm that path reaches a downgrade".
     return [
       makeFinding({
         checkId: 'LG-006',
         seq: 1,
         outcome: 'unknown',
         summary:
-          'Model layer disabled (offline or unconfigured); the Stripe webhook handler was surfaced deterministically but its subscription-cancellation path was not evaluated for an entitlement downgrade.',
+          'Model layer disabled (offline or unconfigured); a Stripe webhook handler was surfaced deterministically and the repository does reference subscription-cancellation handling, but whether that path reaches an entitlement downgrade was not evaluated.',
         evidence: candidates.anchors.slice(0, 1),
       }),
     ];

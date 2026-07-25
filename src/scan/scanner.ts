@@ -196,9 +196,12 @@ function assembleReport(
 /**
  * Builds a synchronous `ScannerFn`. Wiring, not logic: it never invents findings
  * or decisions — detectors and `decide` do that. LG-006 runs its deterministic
- * Layer-D surface and, with NO model judgment available in this path, emits
- * `unknown` ("model layer disabled") when a webhook handler exists (or
- * `not_applicable` when none does). This IS the --offline / model-unconfigured /
+ * Layer-D surface and, with NO model judgment available in this path, resolves
+ * its §3 disjunction: `not_applicable` when no webhook handler exists, a
+ * deterministic `fail` when a handler exists but nothing in the repository
+ * handles subscription cancellation, and `unknown` ("model layer disabled")
+ * when cancellation IS handled but confirming that it reaches an entitlement
+ * downgrade needs the model layer. This IS the --offline / model-unconfigured /
  * AT-27 behavior; the sync path stays synchronous and calls no model.
  */
 export function createScanner(options: ScannerOptions = {}): (fixtureDir: string) => Report {

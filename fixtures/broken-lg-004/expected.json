@@ -1,5 +1,5 @@
 {
-  "_comment": "Seeds exactly LG-004: app/api/stripe/webhook/route.ts consumes the request body without stripe.webhooks.constructEvent. Clean on LG-001 (https prod URL) and LG-002 (no committed keys — process.env only). The health route and the env-based Stripe client are distractors.",
+  "_comment": "Seeds exactly LG-004: app/api/stripe/webhook/route.ts consumes the request body without stripe.webhooks.constructEvent. Clean on LG-001 (https prod URL) and LG-002 (no committed keys — process.env only). The health route and the env-based Stripe client are distractors. The customer.subscription.deleted branch that reaches downgradeEntitlement is ALSO a deliberate distractor: it is present so LG-006's deterministic branch-absent disjunct does not raise a second, unrelated blocker here — this fixture isolates LG-004. LG-006 therefore reports 'unknown' offline (branch present, downgrade unconfirmed), which is not a fail/warning and so does not belong in 'findings'.",
   "decision": "not_ready",
   "exitCode": 1,
   "findings": [
