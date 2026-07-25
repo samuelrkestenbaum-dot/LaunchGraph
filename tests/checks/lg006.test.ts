@@ -59,12 +59,12 @@ describe('LG-006 surface (Layer D)', () => {
     const candidates = surfaceLg006Candidates(fileset);
     expect(candidates.applicable).toBe(true);
     if (!candidates.applicable) return;
-    expect(candidates.handlerPath).toBe('app/api/stripe/webhook/route.ts');
+    expect(candidates.handlerPaths).toEqual(['app/api/stripe/webhook/route.ts']);
     expect(candidates.hasCancellationBranch).toBe(true);
     expect(candidates.handledEvents).toContain('customer.subscription.deleted');
     expect(candidates.handledEvents).toContain('checkout.session.completed');
     expect(candidates.request.excerpts.length).toBeGreaterThan(0);
-    expect(candidates.request.excerpts.every((e) => e.path === candidates.handlerPath)).toBe(true);
+    expect(candidates.request.excerpts.every((e) => candidates.handlerPaths.includes(e.path))).toBe(true);
     // A present cancellation branch means no deterministic "must-fail" fact.
     expect(candidates.request.supportingFacts ?? []).toHaveLength(0);
   });
@@ -117,7 +117,7 @@ describe('LG-006 interpret', () => {
     expect(finding?.severity).toBe(getCheck('LG-006')?.severityCeiling);
     expect(finding?.confidence).toBe(0.85);
     expect(finding?.confidence).toBeLessThanOrEqual(0.9);
-    expect(finding?.evidence.some((e) => e.path === candidates.handlerPath)).toBe(true);
+    expect(finding?.evidence.some((e) => candidates.handlerPaths.includes(e.path))).toBe(true);
   });
 
   it('caps an over-confident fail judgment at 0.9', async () => {

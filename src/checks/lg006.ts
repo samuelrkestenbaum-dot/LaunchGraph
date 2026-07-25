@@ -33,29 +33,14 @@
  * judgment.
  */
 import { fileLines } from '../scan/collect.js';
-import type { Fileset } from '../scan/collect.js';
+import type { CollectedFile, Fileset } from '../scan/collect.js';
 import { buildEvidence } from '../scan/redact.js';
+import { locateWebhookHandlers } from '../scan/webhook.js';
 import type { Evidence, Finding } from '../schema/index.js';
 import type { InferenceRequest, InferenceResult, ResponseSchemaDescriptor, SupportingFact } from '../model/client.js';
 import { runInferenceContract } from '../model/inference.js';
 import type { InferencePresentation } from '../model/inference.js';
 import { makeFinding } from './detectorKit.js';
-
-const CODE_EXT_RE = /\.(?:ts|tsx|js|jsx|mjs|cjs)$/;
-
-/**
- * Mirrors `lg004`'s `isWebhookHandler` (frozen; not exported) — the SAME
- * handler-locate predicate (app/api webhook `route.ts` files plus `pages/api`
- * handlers), intentionally identical so LG-006 asks its different question of
- * the same handler. Duplicated rather than imported because lg004 is frozen and
- * does not export the predicate.
- */
-function isWebhookHandler(path: string): boolean {
-  const lower = path.toLowerCase();
-  if (!CODE_EXT_RE.test(lower)) return false;
-  if (!lower.includes('webhook')) return false;
-  return lower.includes('/api/') || lower.startsWith('api/') || lower.includes('route.') || lower.includes('pages/api');
-}
 
 const SUB_DELETED_RE = /customer\.subscription\.deleted/;
 const SUB_UPDATED_RE = /customer\.subscription\.updated/;
@@ -98,71 +83,112 @@ const LG006_PRESENTATION: InferencePresentation = {
 
 export interface Lg006Applicable {
   applicable: true;
-  handlerPath: string;
-  /** Deterministic: a customer.subscription.deleted / updated-canceled branch exists. */
+  /**
+   * Every located webhook handler, in the shared locator's deterministic order.
+   * LG-006 asks whether the REPOSITORY handles cancellation, so it must see all
+   * of them: a repo that splits handling across files satisfies §3 if the branch
+   * exists in any one of them.
+   */
+  handlerPaths: string[];
+  /**
+   * Deterministic: a customer.subscription.deleted / updated-canceled branch
+   * exists in AT LEAST ONE located handler.
+   */
   hasCancellationBranch: boolean;
-  /** Dotted event names handled by the webhook, sorted. */
+  /** Dotted event names handled across all located handlers, deduplicated and sorted. */
   handledEvents: string[];
   /** The bounded request for the model layer (excerpts already redacted). */
   request: InferenceRequest;
-  /** A light single-line handler anchor for the offline `unknown` finding. */
-  anchor: Evidence;
+  /**
+   * A light single-line anchor per located handler, in the same deterministic
+   * order as `handlerPaths`. The first is the finding anchor.
+   */
+  anchors: Evidence[];
 }
 export interface Lg006NotApplicable {
   applicable: false;
 }
 export type Lg006Candidates = Lg006Applicable | Lg006NotApplicable;
 
-/** Deduplicated, sorted dotted event names referenced in the handler. */
-function enumerateEvents(content: string): string[] {
+/** Deduplicated, sorted dotted event names referenced in the handlers. */
+function enumerateEvents(handlers: readonly CollectedFile[]): string[] {
   const events = new Set<string>();
-  for (const match of content.matchAll(EVENT_NAME_RE)) {
-    const name = match[1];
-    if (name !== undefined) events.add(name);
+  for (const handler of handlers) {
+    for (const match of handler.content.matchAll(EVENT_NAME_RE)) {
+      const name = match[1];
+      if (name !== undefined) events.add(name);
+    }
   }
   return [...events].sort();
 }
 
+/** Deterministic: does THIS handler branch on subscription cancellation? */
+function handlerHasCancellationBranch(content: string): boolean {
+  const hasDeleted = SUB_DELETED_RE.test(content);
+  const hasUpdatedCanceled = SUB_UPDATED_RE.test(content) && CANCELED_STATUS_RE.test(content);
+  return hasDeleted || hasUpdatedCanceled;
+}
+
 /**
- * Layer D: locate the webhook handler and gather the redacted candidate bundle.
- * Returns `not_applicable` when there is no webhook handler at all.
+ * Layer D: locate EVERY webhook handler and gather the redacted candidate
+ * bundle across all of them. Returns `not_applicable` when there is no webhook
+ * handler at all.
+ *
+ * All-handlers (not first-match) is a correctness requirement, not tidiness:
+ * §3 scopes LG-006 to whether the repository handles cancellation at all, so a
+ * repo that splits handling across files satisfies it if the branch exists in
+ * any handler. Stopping at the first match would let a blocker-capable check
+ * report "absent" from a file that simply is not the one doing the work.
  */
 export function surfaceLg006Candidates(fileset: Fileset): Lg006Candidates {
-  const handler = fileset.files.find((f) => isWebhookHandler(f.path));
-  if (handler === undefined) {
+  const handlers = locateWebhookHandlers(fileset);
+  if (handlers.length === 0) {
     return { applicable: false };
   }
 
-  const lines = fileLines(handler);
-  const content = handler.content;
-  const hasDeleted = SUB_DELETED_RE.test(content);
-  const hasUpdatedCanceled = SUB_UPDATED_RE.test(content) && CANCELED_STATUS_RE.test(content);
-  const hasCancellationBranch = hasDeleted || hasUpdatedCanceled;
-  const handledEvents = enumerateEvents(content);
+  const hasCancellationBranch = handlers.some((h) => handlerHasCancellationBranch(h.content));
+  const handledEvents = enumerateEvents(handlers);
 
-  // Excerpt 0: the whole handler (context for the model). Excerpt 1 (optional):
-  // a focused line at the cancellation branch, so the model has a precise
-  // citation target distinct from the whole-handler excerpt.
-  const excerpts: Evidence[] = [
-    buildEvidence({
-      path: handler.path,
-      startLine: 1,
-      endLine: lines.length,
-      rawExcerpt: content,
-      kind: 'code',
-      note: 'Stripe webhook handler surfaced for subscription-cancellation-path analysis (does cancellation reach an entitlement downgrade?).',
-    }),
-  ];
-  const branchIdx = lines.findIndex((l) => SUB_DELETED_RE.test(l) || SUB_UPDATED_RE.test(l));
-  if (hasCancellationBranch && branchIdx > 0) {
+  // Per handler: the whole handler (context for the model), then — when that
+  // handler itself branches on cancellation — a focused line at the branch, so
+  // the model has a precise citation target distinct from the whole-handler
+  // excerpt. Handler count is structurally tiny, so surfacing all of them
+  // cannot grow unboundedly.
+  const excerpts: Evidence[] = [];
+  const anchors: Evidence[] = [];
+  for (const handler of handlers) {
+    const lines = fileLines(handler);
     excerpts.push(
       buildEvidence({
         path: handler.path,
-        startLine: branchIdx + 1,
-        endLine: branchIdx + 1,
-        rawExcerpt: lines[branchIdx] ?? '',
+        startLine: 1,
+        endLine: lines.length,
+        rawExcerpt: handler.content,
         kind: 'code',
-        note: 'Subscription-cancellation event branch.',
+        note: 'Stripe webhook handler surfaced for subscription-cancellation-path analysis (does cancellation reach an entitlement downgrade?).',
+      }),
+    );
+    const branchIdx = lines.findIndex((l) => SUB_DELETED_RE.test(l) || SUB_UPDATED_RE.test(l));
+    if (handlerHasCancellationBranch(handler.content) && branchIdx > 0) {
+      excerpts.push(
+        buildEvidence({
+          path: handler.path,
+          startLine: branchIdx + 1,
+          endLine: branchIdx + 1,
+          rawExcerpt: lines[branchIdx] ?? '',
+          kind: 'code',
+          note: 'Subscription-cancellation event branch.',
+        }),
+      );
+    }
+    anchors.push(
+      buildEvidence({
+        path: handler.path,
+        startLine: 1,
+        endLine: 1,
+        rawExcerpt: lines[0] ?? '',
+        kind: 'code',
+        note: 'Stripe webhook handler located for subscription-cancellation analysis.',
       }),
     );
   }
@@ -172,7 +198,7 @@ export function surfaceLg006Candidates(fileset: Fileset): Lg006Candidates {
     supportingFacts.push({
       id: 'fact:lg006.no-cancellation-branch',
       statement:
-        'The webhook handler has no customer.subscription.deleted (or updated-canceled) branch, so no cancellation path can reach an entitlement downgrade.',
+        'No detected Stripe webhook handler has a customer.subscription.deleted (or updated-canceled) branch, so no cancellation path can reach an entitlement downgrade.',
       establishesVerdict: 'fail',
     });
   }
@@ -185,16 +211,14 @@ export function surfaceLg006Candidates(fileset: Fileset): Lg006Candidates {
     supportingFacts,
   };
 
-  const anchor = buildEvidence({
-    path: handler.path,
-    startLine: 1,
-    endLine: 1,
-    rawExcerpt: lines[0] ?? '',
-    kind: 'code',
-    note: 'Stripe webhook handler located for subscription-cancellation analysis.',
-  });
-
-  return { applicable: true, handlerPath: handler.path, hasCancellationBranch, handledEvents, request, anchor };
+  return {
+    applicable: true,
+    handlerPaths: handlers.map((h) => h.path),
+    hasCancellationBranch,
+    handledEvents,
+    request,
+    anchors,
+  };
 }
 
 /**
@@ -228,7 +252,7 @@ export function interpretLg006(candidates: Lg006Candidates, judgment?: Inference
         outcome: 'unknown',
         summary:
           'Model layer disabled (offline or unconfigured); the Stripe webhook handler was surfaced deterministically but its subscription-cancellation path was not evaluated for an entitlement downgrade.',
-        evidence: [candidates.anchor],
+        evidence: candidates.anchors.slice(0, 1),
       }),
     ];
   }

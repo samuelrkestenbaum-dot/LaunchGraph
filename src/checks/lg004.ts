@@ -13,6 +13,10 @@
  * - `not_applicable` — no webhook handler exists (a *missing* handler is
  *   LG-003's concern, not LG-004's).
  *
+ * The handler set comes from the shared locator (`src/scan/webhook.ts`) — the
+ * same set LG-006 reasons over, so the two checks can never disagree about
+ * *which* files are webhook handlers while asking different questions of them.
+ *
  * Verification is recognised via `constructEvent(...)`, or the equivalent of a
  * `stripe-signature` header read paired with an HMAC/constant-time comparison.
  * Body consumption is recognised via `req/request.text()/json()/…`, `rawBody`,
@@ -21,22 +25,14 @@
 import { fileLines } from '../scan/collect.js';
 import type { CollectedFile, Fileset } from '../scan/collect.js';
 import { buildAbsenceEvidence, buildEvidence } from '../scan/redact.js';
+import { locateWebhookHandlers } from '../scan/webhook.js';
 import type { Evidence, Finding } from '../schema/index.js';
 import { firstLineMatching, makeFinding } from './detectorKit.js';
 
-const CODE_EXT_RE = /\.(?:ts|tsx|js|jsx|mjs|cjs)$/;
 const CONSTRUCT_EVENT_RE = /constructEvent(?:Async)?\s*\(/;
 const STRIPE_SIG_HEADER_RE = /stripe-signature/i;
 const HMAC_RE = /createHmac|timingSafeEqual|verifyHeader/;
 const BODY_CONSUME_RE = /\.(?:text|json|arrayBuffer|formData)\s*\(|rawBody|req\.body|request\.body|JSON\.parse\s*\(/;
-
-/** A code file that looks like a Stripe webhook handler by path. */
-function isWebhookHandler(path: string): boolean {
-  const lower = path.toLowerCase();
-  if (!CODE_EXT_RE.test(lower)) return false;
-  if (!lower.includes('webhook')) return false;
-  return lower.includes('/api/') || lower.startsWith('api/') || lower.includes('route.') || lower.includes('pages/api');
-}
 
 function verifiesSignature(content: string): boolean {
   if (CONSTRUCT_EVENT_RE.test(content)) return true;
@@ -44,7 +40,7 @@ function verifiesSignature(content: string): boolean {
 }
 
 export function detectLg004(fileset: Fileset): Finding[] {
-  const handlers = fileset.files.filter((f) => isWebhookHandler(f.path));
+  const handlers = locateWebhookHandlers(fileset);
 
   const failing: CollectedFile[] = [];
   for (const handler of handlers) {
