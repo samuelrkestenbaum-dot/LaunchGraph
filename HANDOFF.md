@@ -6,11 +6,17 @@
 ## 0. First move (do this before acting)
 
 The **source of truth is the Build OS memory**, not this file. On session start, read, in order:
-1. `ClaudeOrchestrator/build-os/memory/current_state.md` — where we are.
-2. `ClaudeOrchestrator/build-os/memory/residue.md` — standing constraints + open follow-ups.
-3. `ClaudeOrchestrator/build-os/packets/active_packet.md` — the next staged packet.
-4. The latest `ClaudeOrchestrator/build-os/receipts/P-*.md` — what the last packet did.
-5. `LaunchGraph/specs/phase-1-repository-auditor.md` — the authoritative spec.
+1. `build-os/memory/current_state.md` — where we are.
+2. `build-os/memory/residue.md` — standing constraints + open follow-ups.
+3. `build-os/packets/active_packet.md` — the next staged packet.
+4. The latest `build-os/receipts/P-*.md` — what the last packet did.
+5. `specs/phase-1-repository-auditor.md` — the authoritative spec.
+
+> **All five paths are in THIS repo.** As of 2026-07-25 the Build OS project
+> memory was **relocated out of ClaudeOrchestrator into this product repo**
+> (canonical `install-project.sh` layout), because SugarBee's `P-001…P-005`
+> receipts collided by filename with the framework's own `P-001…P-022`
+> development packets. ClaudeOrchestrator is now **the framework only**.
 
 This handoff summarizes them but they are canonical and kept current.
 
@@ -31,8 +37,8 @@ egress is a configured model API. Full product vision: `PRODUCT_SCOPE.md`.
 | | |
 |---|---|
 | **Product repo** | GitHub `samuelrkestenbaum-dot/LaunchGraph` (slug still says LaunchGraph — see §9), local `/home/user/LaunchGraph`, tip **`b9c8ff5`** |
-| **Control repo (Build OS)** | `samuelrkestenbaum-dot/ClaudeOrchestrator`, local `/home/user/ClaudeOrchestrator`, tip **`ef8a75c`**; Build OS lives in `build-os/` |
-| **Working branch (BOTH repos)** | `claude/launchgraph-product-scope-43pgdx` — **pinned, do not rename** |
+| **Control repo (Build OS)** | `samuelrkestenbaum-dot/ClaudeOrchestrator`, local `/home/user/ClaudeOrchestrator`, canonical tip **`7ef50e8`** — **framework only**; this project's `build-os/` lives in the product repo |
+| **Working branch (BOTH repos)** | `claude/sugarbee-project-handoff-ic47uc` — supersedes the retired `claude/launchgraph-product-scope-43pgdx` at the identical product tip |
 | **Run** | `npm test` (Vitest) · `npm run typecheck` (tsc --noEmit) · `npm run eval` (fixture harness) |
 | **CLI** | `sugarbee scan [path]` / `sugarbee eval`; via `npx tsx bin/sugarbee.ts …` |
 
@@ -105,9 +111,23 @@ Then implement **LG-005** (non-idempotent webhook, D+M) via the substrate: a Lay
 
 **Roadmap after A-S2:** LG-009, LG-011, LG-013 (D+M) → LG-007 (M) → **LG-012 (D+M, external — last)**. Then the deferred program items in §8.
 
-## 7A. PENDING (user-authorized, NOT yet done): adopt the canonical Build OS tooling
+## 7A. RESOLVED (2026-07-25): canonical Build OS tooling adopted, memory relocated
 
-The user authorized "update this project to the latest canonical ClaudeOrchestrator at `7ef50e8` and make future fresh Code tasks pick it up," then changed course to hand off. **Investigated read-only, nothing executed.** Findings for whoever resumes it:
+**Done.** The ClaudeOrchestrator branch `claude/sugarbee-project-handoff-ic47uc`
+was cut from canonical `7ef50e8`, so the framework arrived with **no merge and no
+conflict**. The predicted receipt collision was resolved **structurally, on the
+user's decision**: canonical `install-project.sh` was run into THIS repo, so
+SugarBee's Build OS (agents, commands, hooks, `CLAUDE.md` managed block,
+`build-os/memory|packets|receipts`) now lives here and ClaudeOrchestrator stays
+the framework only. SugarBee's `P-001…P-005` receipts, `current_state.md`,
+`residue.md`, and the staged `active_packet.md` were restored verbatim from
+`ef8a75c` and reconciled for the new home/branch; `tool_router.md` is canonical's
+(the old copy had no SugarBee-specific rows). The **SessionStart hook was
+dry-run and fires correctly** here — it resolves project memory and reads the
+active packet. Suite stayed **213/213**, typecheck clean, eval **10/10**.
+
+The original investigation notes are kept below as the record of *why* it was
+done this way:
 
 - **`7ef50e8`** is the tip of ClaudeOrchestrator's **canonical default branch `claude/add-build-os`** (dated 2026-07-25, author "Sam's Mac"). The framework has advanced ~17 packets past our base (P-006…P-022): a **SessionStart bootstrap**, MCP auto-registration (Serena/Repomix/ccusage), claude-watch supervision, terminal-integrity, `build-os/tools/*.sh`, `install-accelerators.sh`, `repair-host-integrations.sh`, `templates/`, `tests/build_os_tests.sh`.
 - **The "fresh Code tasks pick it up" mechanism** is canonical `.claude/settings.json` → `hooks.SessionStart` → `.claude/hooks/session-start-build-os.sh` (+ `UserPromptSubmit` → `prompt-router.sh`). That hook prints the orchestrator reminder, background-runs `install-accelerators.sh`, and surfaces the active packet + a capability inventory. Adopting canonical `.claude/` + the scripts is what makes new sessions auto-load Build OS.
@@ -126,6 +146,6 @@ The user authorized "update this project to the latest canonical ClaudeOrchestra
 
 - The product was **renamed LaunchGraph → SugarBee.ai** (brand) and `launchgraph → sugarbee` (CLI/package/`.sugarbee/` dir/`SUGARBEE_*` env/`bin/sugarbee.ts`).
 - **Check IDs kept the `LG-` prefix** (spec-declared "stable, versioned"; opaque IDs, not brand). Could be moved to `SB-` if the user wants — it's ~414 occurrences across code/tests/fixtures/receipts, a deliberate non-change.
-- The **GitHub repo slug is still `LaunchGraph`** and the **branch is still `claude/launchgraph-product-scope-43pgdx`** — neither is renamable from a session (repo slug = GitHub settings; branch is pinned by session instructions). Their contents say SugarBee.ai.
+- The **GitHub repo slug is still `LaunchGraph`** — not renamable from a session (repo slug = GitHub settings). Its contents say SugarBee.ai. The **working branch is now `claude/sugarbee-project-handoff-ic47uc`**; the retired `claude/launchgraph-product-scope-43pgdx` points at the identical product tip and is no longer written to.
 - **Closed receipts P-001…P-005 still say "LaunchGraph"** — preserved as append-only history per the receipts convention.
 - Everything is **pushed and in sync**; nothing merged; no PR open.
