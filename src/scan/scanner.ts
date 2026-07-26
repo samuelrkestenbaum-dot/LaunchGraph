@@ -39,6 +39,7 @@ import { detectLg014 } from '../checks/lg014.js';
 import { detectLg015 } from '../checks/lg015.js';
 import { lg005ModelCheck } from '../checks/lg005.js';
 import { lg006ModelCheck } from '../checks/lg006.js';
+import { lg009ModelCheck } from '../checks/lg009.js';
 import type { ModelCheck } from '../model/modelCheck.js';
 import { basename } from '../checks/detectorKit.js';
 import type { ModelClient } from '../model/client.js';
@@ -156,7 +157,7 @@ function detectStack(fileset: Fileset): StackDetection {
  * from being wired into one path and not the other — the defect class AT-27
  * exists to catch.
  */
-const MODEL_CHECKS: readonly ModelCheck[] = [lg006ModelCheck, lg005ModelCheck];
+const MODEL_CHECKS: readonly ModelCheck[] = [lg006ModelCheck, lg005ModelCheck, lg009ModelCheck];
 
 /** The eight deterministic (Layer D) detectors, in fixed order. */
 function deterministicFindings(fileset: Fileset): Finding[] {

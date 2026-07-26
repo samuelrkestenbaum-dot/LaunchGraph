@@ -582,3 +582,81 @@ describe('AT-24 (amended DC-12) — the unsupported stack, asserted behaviourall
     expect(serializeReport(scan(dir))).toBe(serializeReport(scan(dir)));
   });
 });
+
+describe('A-S3 — LG-009 wiring, three-check suppression and determinism', () => {
+  /** A repo that makes ALL THREE model checks live at once. */
+  function threeCheckRepo(): string {
+    return makeRepo({
+      'package.json': NEXT_PKG,
+      'app/api/stripe/webhook/route.ts': HANDLER_DELEGATING,
+      'lib/events.ts': EVENTS_MODULE,
+      'migrations/001.sql':
+        'CREATE TABLE organizations (\n  id uuid PRIMARY KEY\n);\nCREATE TABLE invoices (\n  id uuid PRIMARY KEY,\n  organization_id uuid\n);\n',
+      'lib/tenancy.ts': 'export const db = base.$extends(withOrg(ctx.orgId));\n',
+      'prisma/schema.prisma': 'model Organization { id String @id }\n',
+      'README.md': 'organizations, organization_id, customer.subscription.deleted, event.id\n',
+      '.env.production': PROD_ENV,
+    }).root;
+  }
+  function spy(verdict: 'fail' | 'pass', confidence: number): FakeModelClient {
+    return new FakeModelClient({ ...scriptFor(verdict, confidence), 'LG-009': scriptFor(verdict, confidence)['LG-006']! });
+  }
+  const idsOf = (m: FakeModelClient): string[] => m.requests.map((r) => r.checkId);
+
+  it('DC-14: asks all three checks, sequentially, in the fixed append-only order', async () => {
+    const model = spy('pass', 0.8);
+    await scanWithModel(threeCheckRepo(), model, { now: FIXED });
+    expect(idsOf(model)).toEqual(['LG-006', 'LG-005', 'LG-009']);
+  });
+
+  for (const excluded of ['LG-005', 'LG-006', 'LG-009']) {
+    it(`DC-14: --checks excluding ${excluded} makes ZERO ${excluded} infer calls`, async () => {
+      const others = ['LG-005', 'LG-006', 'LG-009'].filter((c) => c !== excluded);
+      const model = spy('pass', 0.8);
+      await scanWithModel(threeCheckRepo(), model, { now: FIXED, checks: others });
+      expect(idsOf(model)).not.toContain(excluded);
+      for (const o of others) expect(idsOf(model)).toContain(o);
+    });
+  }
+
+  it('DC-14: --checks naming no model check makes ZERO infer calls', async () => {
+    const model = spy('pass', 0.8);
+    await scanWithModel(threeCheckRepo(), model, { now: FIXED, checks: ['LG-001'] });
+    expect(model.requests).toHaveLength(0);
+  });
+
+  it('DC-17: two fixed-clock online scans are byte-identical, and surfacing is stable', async () => {
+    const dir = threeCheckRepo();
+    const a = await scanWithModel(dir, spy('pass', 0.8), { now: FIXED });
+    const b = await scanWithModel(dir, spy('pass', 0.8), { now: FIXED });
+    expect(serializeReport(a)).toBe(serializeReport(b));
+    const orderings = new Set([0, 1, 2, 3].map(() => JSON.stringify(idsOf(spy('pass', 0.8)))));
+    expect(orderings.size).toBe(1);
+  });
+
+  it('DC-13: no non-source file reaches ANY of the three requests', async () => {
+    const model = spy('pass', 0.8);
+    await scanWithModel(threeCheckRepo(), model, { now: FIXED });
+    const allowed = new Set(['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'mts', 'cts']);
+    expect(model.requests).toHaveLength(3);
+    for (const req of model.requests) {
+      for (const e of req.excerpts) {
+        expect(allowed.has(e.path.split('.').pop() ?? ''), `${req.checkId}: ${e.path}`).toBe(true);
+      }
+    }
+  });
+
+  it('LG-009 is wired into the OFFLINE path too (AT-27 defect class)', () => {
+    const report = createScanner({ now: FIXED })(threeCheckRepo());
+    const lg009 = report.findings.find((f) => f.checkId === 'LG-009');
+    expect(lg009?.outcome).toBe('unknown');
+    expect(lg009?.summary).toContain('Model layer disabled');
+    expect(report.counts.blockers).toBe(0);
+  });
+
+  it('DC-16: LG-009 never yields an unqualified `ready`, offline or online', async () => {
+    const offline = createScanner({ now: FIXED })(threeCheckRepo());
+    const online = await scanWithModel(threeCheckRepo(), spy('pass', 0.9), { now: FIXED });
+    for (const r of [offline, online]) expect(r.decision.value).not.toBe('ready');
+  });
+});
