@@ -48,12 +48,18 @@
 import { fileLines } from '../scan/collect.js';
 import type { Fileset } from '../scan/collect.js';
 import { buildEvidence } from '../scan/redact.js';
-import { partitionWithheldCarriers, surfaceDelegatedCandidates } from '../scan/surface.js';
+import {
+  elisionDisclosure,
+  partitionWithheldCarriers,
+  surfaceDelegatedCandidates,
+  withheldNonSourceDisclosure,
+} from '../scan/surface.js';
 import { locateWebhookHandlers } from '../scan/webhook.js';
 import type { Evidence, Finding } from '../schema/index.js';
 import type { InferenceRequest, InferenceResult, ResponseSchemaDescriptor } from '../model/client.js';
 import { runInferenceContract } from '../model/inference.js';
 import type { InferencePresentation } from '../model/inference.js';
+import type { ModelCheck } from '../model/modelCheck.js';
 import { makeFinding } from './detectorKit.js';
 
 /**
@@ -111,37 +117,6 @@ const QUESTION =
   'on processed events, a dedup helper, or a handler that is idempotent by construction because it only ' +
   'reconciles state (for example an UPDATE that sets a row to the event\'s value rather than incrementing it). ' +
   'The guard need not live in the handler file — a handler that delegates to a module performing the check satisfies this.';
-
-/**
- * Discloses source files the cap excluded. Rides on the question because the
- * SEC-5 envelope transmits only each excerpt's locator and text — an excerpt
- * `note` never reaches the model.
- */
-function elisionDisclosure(elided: number): string {
-  if (elided <= 0) return '';
-  return (
-    ` NOTE ON COMPLETENESS: ${elided} further source file(s) in this repository also reference idempotency ` +
-    `or event-id handling but were NOT surfaced to you (at most ${MAX_DELEGATED_EXCERPTS} are included). ` +
-    'The guard may be in one of them. Treat the surfaced set as incomplete: the absence of a guard in what ' +
-    'you can see is not evidence that none exists.'
-  );
-}
-
-/**
- * Discloses files withheld because they are not source code. This matters more
- * for LG-005 than for any other check: a `UNIQUE INDEX` in a migration or an
- * `@@unique` in a Prisma schema is a *canonical* correct idempotency guard, and
- * the prompt bound means the model can never see it.
- */
-function withheldNonSourceDisclosure(count: number): string {
-  if (count <= 0) return '';
-  return (
-    ` NOTE ON COMPLETENESS: ${count} non-source file(s) in this repository (for example database migrations ` +
-    'or schema definitions) also reference idempotency or event-id handling but were NOT surfaced to you, ' +
-    'because only source code is sent to the model. A unique constraint declared in such a file is a ' +
-    'standard and sufficient idempotency guard, so treat their contents as unknown rather than as absent.'
-  );
-}
 
 /** How LG-005 presents a resolved model judgment as a §5 Finding. */
 const LG005_PRESENTATION: InferencePresentation = {
@@ -227,7 +202,7 @@ export function surfaceLg005Candidates(fileset: Fileset): Lg005Candidates {
     handlers,
     selects: (content) => IDEMPOTENCY_SIGNAL_RE.test(content),
     anchor: IDEMPOTENCY_SIGNAL_RE,
-    prefers: (content) => WEBHOOK_DEDUP_RE.test(content),
+    prefers: [(content) => WEBHOOK_DEDUP_RE.test(content)],
     cap: MAX_DELEGATED_EXCERPTS,
     windowBefore: WINDOW_BEFORE,
     windowAfter: WINDOW_AFTER,
@@ -241,7 +216,21 @@ export function surfaceLg005Candidates(fileset: Fileset): Lg005Candidates {
   const request: InferenceRequest = {
     checkId: 'LG-005',
     question:
-      QUESTION + elisionDisclosure(delegated.elided) + withheldNonSourceDisclosure(withheld.other.length),
+      QUESTION +
+      elisionDisclosure({
+        elided: delegated.elided,
+        cap: MAX_DELEGATED_EXCERPTS,
+        fileNoun: 'source file(s)',
+        referencePhrase: 'reference idempotency or event-id handling',
+        mayBeThere: 'The guard may be in one of them.',
+        absenceNoun: 'a guard',
+      }) +
+      withheldNonSourceDisclosure({
+        count: withheld.other.length,
+        referencePhrase: 'reference idempotency or event-id handling',
+        whyItMatters:
+          'A unique constraint declared in such a file is a standard and sufficient idempotency guard,',
+      }),
     excerpts,
     responseSchema: RESPONSE_SCHEMA,
     // DELIBERATELY EMPTY. §3 assigns LG-005's deterministic layer candidates,
@@ -304,3 +293,23 @@ export function interpretLg005(candidates: Lg005Candidates, judgment?: Inference
 
   return [contract.finding];
 }
+
+/**
+ * LG-005 as a {@link ModelCheck}.
+ *
+ * LG-005's only settled state is `not_applicable` — §3 assigns its
+ * deterministic layer candidates, not a verdict, so whenever a webhook handler
+ * exists the model is asked. Expressing settledness as a withheld `request`
+ * is what makes that difference from LG-006 a data difference rather than a
+ * polarity a caller could get backwards.
+ */
+export const lg005ModelCheck: ModelCheck = {
+  checkId: 'LG-005',
+  surface(fileset) {
+    const candidates = surfaceLg005Candidates(fileset);
+    return {
+      request: candidates.applicable ? candidates.request : undefined,
+      interpret: (judgment) => interpretLg005(candidates, judgment),
+    };
+  },
+};

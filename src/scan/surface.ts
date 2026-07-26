@@ -105,8 +105,14 @@ export interface DelegatedSurfaceOptions {
    *
    * Omitting `prefers` leaves selection and ordering exactly as they were, so
    * a caller that does not rank is unaffected.
+   *
+   * **Ordered bands.** Each predicate is a band, tried in order: band 0 fills
+   * the cap first, then band 1, and so on, with everything unmatched last. A
+   * file belongs to the FIRST band it matches, so bands need not be disjoint.
+   * The one-band case is byte-identical to the previous single-predicate form
+   * by construction — one band produces exactly `[matches, non-matches]`.
    */
-  prefers?: (content: string) => boolean;
+  prefers?: readonly ((content: string) => boolean)[];
 }
 
 export interface DelegatedSurface {
@@ -114,6 +120,18 @@ export interface DelegatedSurface {
   excerpts: Evidence[];
   /** How many selected files the cap excluded. Callers MUST disclose this. */
   elided: number;
+  /**
+   * How many files the cap excluded, per band, indexed as `prefers` — with one
+   * extra trailing entry for files matching no band. Always
+   * `prefers.length + 1` long (or length 1 when `prefers` is omitted), and it
+   * always sums to {@link elided}.
+   *
+   * A caller can use this to tell *what kind* of evidence went missing. That
+   * matters when the elided band is the one that would have exonerated the
+   * repository: losing generic matches is noise, losing the specific band means
+   * the surface can no longer support a confident negative verdict.
+   */
+  elidedByBand: readonly number[];
 }
 
 /**
@@ -133,15 +151,31 @@ export function surfaceDelegatedCandidates(fileset: Fileset, opts: DelegatedSurf
     (f) => !handlerPaths.has(f.path) && isModelSurfaceableFile(f.path) && opts.selects(f.content),
   );
   // Rank before capping, so a binding cap drops the least-relevant files rather
-  // than the ones latest in path order. `filter` preserves the collector's
-  // order, so each band stays path-sorted and the result is deterministic.
-  const prefers = opts.prefers;
-  const ranked =
-    prefers === undefined
-      ? selected
-      : [...selected.filter((f) => prefers(f.content)), ...selected.filter((f) => !prefers(f.content))];
+  // than the ones latest in path order. Implemented as successive `filter`
+  // passes over the remainder — which preserves the collector's path order
+  // within every band, and makes the one-band case literally the same two
+  // concatenated filters as before rather than a sort whose stability would
+  // have to be argued.
+  const bands = opts.prefers ?? [];
+  const bandOf = new Map<CollectedFile, number>();
+  const ranked: CollectedFile[] = [];
+  let rest = selected;
+  bands.forEach((matches, band) => {
+    const hit = rest.filter((f) => matches(f.content));
+    for (const f of hit) bandOf.set(f, band);
+    ranked.push(...hit);
+    rest = rest.filter((f) => !matches(f.content));
+  });
+  for (const f of rest) bandOf.set(f, bands.length);
+  ranked.push(...rest);
+
   const surfaced = ranked.slice(0, opts.cap);
   const elided = ranked.length - surfaced.length;
+  const elidedByBand = new Array<number>(bands.length + 1).fill(0);
+  for (const f of ranked.slice(opts.cap)) {
+    const band = bandOf.get(f) ?? bands.length;
+    elidedByBand[band] = (elidedByBand[band] ?? 0) + 1;
+  }
 
   const excerpts: Evidence[] = [];
   surfaced.forEach((file, i) => {
@@ -167,7 +201,73 @@ export function surfaceDelegatedCandidates(fileset: Fileset, opts: DelegatedSurf
     );
   });
 
-  return { excerpts, elided };
+  return { excerpts, elided, elidedByBand };
+}
+
+export interface ElisionDisclosureParams {
+  /** How many selected files the cap excluded. Zero yields the empty string. */
+  elided: number;
+  /** The cap that did the excluding. */
+  cap: number;
+  /** Plural noun for the excluded files, e.g. `code file(s)` / `source file(s)`. */
+  fileNoun: string;
+  /** Verb phrase, e.g. `reference subscription cancellation`. */
+  referencePhrase: string;
+  /** One sentence naming what might be in them, e.g. `The guard may be in one of them.` */
+  mayBeThere: string;
+  /** Noun for what is absent, e.g. `a downgrade` / `a guard`. */
+  absenceNoun: string;
+}
+
+/**
+ * Discloses cap-elided source files **to the model**.
+ *
+ * This has to ride on `InferenceRequest.question`, not on an excerpt `note`:
+ * `buildUntrustedDataEnvelope` transmits only each excerpt's
+ * `path:startLine-endLine (kind)` locator and its redacted text, so a
+ * note-borne disclosure is visible to a human inspecting the request object and
+ * to nobody else — precisely where disclosure does not matter.
+ *
+ * The wording argues completeness in NEITHER direction. It must never suggest
+ * that many matches imply the repository does the right thing: a capped band
+ * can be entirely ordinary UI copy or CRUD while the file that answers the
+ * question is the one that was dropped.
+ */
+export function elisionDisclosure(p: ElisionDisclosureParams): string {
+  if (p.elided <= 0) return '';
+  return (
+    ` NOTE ON COMPLETENESS: ${p.elided} further ${p.fileNoun} in this repository also ${p.referencePhrase} ` +
+    `but were NOT surfaced to you (at most ${p.cap} are included). ${p.mayBeThere} ` +
+    `Treat the surfaced set as incomplete: the absence of ${p.absenceNoun} in what you can see is not evidence that none exists.`
+  );
+}
+
+export interface WithheldNonSourceParams {
+  /** How many non-source carriers were withheld. Zero yields the empty string. */
+  count: number;
+  /** Verb phrase, matching {@link ElisionDisclosureParams.referencePhrase}. */
+  referencePhrase: string;
+  /** Clause explaining why such a file could matter, ending WITHOUT trailing punctuation-space. */
+  whyItMatters: string;
+}
+
+/**
+ * Discloses files withheld because they are not source code — chiefly `.sql`
+ * migrations and `.prisma` schemas, which the SEC-5 prompt bound excludes.
+ *
+ * These are exactly the files a "nothing in this repository does X" claim would
+ * be wrong about: a unique constraint or a trigger genuinely can act. Since the
+ * surface cannot show them and the deterministic layer cannot honestly discount
+ * them, the only truthful move is to say they exist and that their contents are
+ * unknown.
+ */
+export function withheldNonSourceDisclosure(p: WithheldNonSourceParams): string {
+  if (p.count <= 0) return '';
+  return (
+    ` NOTE ON COMPLETENESS: ${p.count} non-source file(s) in this repository (for example database migrations ` +
+    `or schema definitions) also ${p.referencePhrase} but were NOT surfaced to you, because only source code ` +
+    `is sent to the model. ${p.whyItMatters} so treat their contents as unknown rather than as absent.`
+  );
 }
 
 /**

@@ -58,15 +58,18 @@ import { fileLines } from '../scan/collect.js';
 import type { CollectedFile, Fileset } from '../scan/collect.js';
 import { buildAbsenceEvidence, buildEvidence } from '../scan/redact.js';
 import {
+  elisionDisclosure,
   isModelSurfaceableFile,
   partitionWithheldCarriers,
   surfaceDelegatedCandidates,
+  withheldNonSourceDisclosure,
 } from '../scan/surface.js';
 import { locateWebhookHandlers } from '../scan/webhook.js';
 import type { Evidence, Finding } from '../schema/index.js';
 import type { InferenceRequest, InferenceResult, ResponseSchemaDescriptor, SupportingFact } from '../model/client.js';
 import { runInferenceContract } from '../model/inference.js';
 import type { InferencePresentation } from '../model/inference.js';
+import type { ModelCheck } from '../model/modelCheck.js';
 import { makeFinding } from './detectorKit.js';
 
 const SUB_DELETED_RE = /customer\.subscription\.deleted/;
@@ -106,53 +109,7 @@ const QUESTION =
  */
 const MAX_DELEGATED_EXCERPTS = 5;
 
-/**
- * Discloses a capped surface to the MODEL.
- *
- * This has to ride on the question, not on an excerpt `note`: the SEC-5
- * envelope (`buildUntrustedDataEnvelope`) transmits only each excerpt's
- * `path:startLine-endLine (kind)` locator and its redacted text — `note` never
- * reaches the model. A disclosure written into a note is visible to a human
- * reading the request object and to nobody else, which is precisely where
- * disclosure does not matter.
- *
- * The wording deliberately does NOT argue that many mentions imply the
- * repository handles cancellation. Five files can all be ordinary UI copy
- * carrying an analytics label while the real handler is the elided one, so the
- * honest statement is that the surface is incomplete and silence is not
- * evidence of absence.
- */
-function elisionDisclosure(elided: number): string {
-  if (elided <= 0) return '';
-  return (
-    ` NOTE ON COMPLETENESS: ${elided} further code file(s) in this repository also reference subscription ` +
-    `cancellation but were NOT surfaced to you (at most ${MAX_DELEGATED_EXCERPTS} are included). ` +
-    'The code performing the entitlement downgrade may be in one of them. ' +
-    'Treat the surfaced set as incomplete: the absence of a downgrade in what you can see is not evidence that none exists.'
-  );
-}
-
-/**
- * Discloses files withheld because they are **not source code** — chiefly `.sql`
- * migrations and `.prisma` schemas, which the SEC-5 prompt bound excludes.
- *
- * These are exactly the files a "nothing in this repository handles it" claim
- * would be wrong about: a unique constraint or trigger genuinely can revoke
- * access. Since the surface cannot show them and the deterministic layer cannot
- * honestly discount them, the only truthful move is to say they exist and that
- * their contents are unknown. Like the cap disclosure, this argues completeness
- * in neither direction.
- */
-function withheldNonSourceDisclosure(count: number): string {
-  if (count <= 0) return '';
-  return (
-    ` NOTE ON COMPLETENESS: ${count} non-source file(s) in this repository (for example database migrations ` +
-    'or schema definitions) also reference subscription cancellation but were NOT surfaced to you, because ' +
-    'only source code is sent to the model. Such a file can enforce real behaviour — a database constraint ' +
-    'or trigger can remove access — so treat their contents as unknown rather than as absent.'
-  );
-}
-/** Window around the first matching line in a delegated file. */
+/** Window around the first anchor match in a delegated file. */
 const WINDOW_BEFORE = 10;
 const WINDOW_AFTER = 30;
 
@@ -367,7 +324,22 @@ export function surfaceLg006Candidates(fileset: Fileset): Lg006Candidates {
     checkId: 'LG-006',
     // Both disclosures ride here because `question` is transmitted verbatim
     // while excerpt `note`s are not (see `elisionDisclosure`).
-    question: QUESTION + elisionDisclosure(elided) + withheldNonSourceDisclosure(withheld.other.length),
+    question:
+      QUESTION +
+      elisionDisclosure({
+        elided,
+        cap: MAX_DELEGATED_EXCERPTS,
+        fileNoun: 'code file(s)',
+        referencePhrase: 'reference subscription cancellation',
+        mayBeThere: 'The code performing the entitlement downgrade may be in one of them.',
+        absenceNoun: 'a downgrade',
+      }) +
+      withheldNonSourceDisclosure({
+        count: withheld.other.length,
+        referencePhrase: 'reference subscription cancellation',
+        whyItMatters:
+          'Such a file can enforce real behaviour — a database constraint or trigger can remove access —',
+      }),
     excerpts,
     responseSchema: RESPONSE_SCHEMA,
     supportingFacts,
@@ -504,3 +476,28 @@ export function interpretLg006(candidates: Lg006Candidates, judgment?: Inference
 
   return [contract.finding];
 }
+
+/**
+ * LG-006 as a {@link ModelCheck}.
+ *
+ * `request` is withheld exactly when the deterministic layer has settled the
+ * check — which for LG-006 means either no webhook handler exists, or nothing
+ * in the repository handles cancellation at all (§4.3: that required
+ * deterministic signal must not be routed through a model).
+ *
+ * The `applicable &&` conjunct is TYPE NARROWING, not logic:
+ * `isLg006SettledDeterministically` already returns `true` for the
+ * inapplicable case, so the conjunct cannot change the result. That redundancy
+ * is pinned by a test rather than assumed.
+ */
+export const lg006ModelCheck: ModelCheck = {
+  checkId: 'LG-006',
+  surface(fileset) {
+    const candidates = surfaceLg006Candidates(fileset);
+    const settled = isLg006SettledDeterministically(candidates);
+    return {
+      request: candidates.applicable && !settled ? candidates.request : undefined,
+      interpret: (judgment) => interpretLg006(candidates, judgment),
+    };
+  },
+};

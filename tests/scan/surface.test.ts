@@ -212,7 +212,7 @@ describe('surfaceDelegatedCandidates — the optional `prefers` ranking', () => 
         handlers: locateWebhookHandlers(fileset),
         selects: selectsAny,
         anchor: /upsert|idempoten/i,
-        prefers: (c) => SPECIFIC.test(c),
+        prefers: [(c: string) => SPECIFIC.test(c)],
       }),
     );
     expect(out.excerpts.map((e) => e.path)).toEqual(['lib/guard.ts', 'app/a.ts', 'app/b.ts', 'app/c.ts', 'app/d.ts']);
@@ -227,7 +227,7 @@ describe('surfaceDelegatedCandidates — the optional `prefers` ranking', () => 
         handlers: locateWebhookHandlers(fileset),
         selects: selectsAny,
         anchor: /upsert|idempoten/i,
-        prefers: (c) => SPECIFIC.test(c),
+        prefers: [(c: string) => SPECIFIC.test(c)],
       }),
     );
     const generic = out.excerpts.map((e) => e.path).filter((p) => p.startsWith('app/'));
@@ -238,8 +238,84 @@ describe('surfaceDelegatedCandidates — the optional `prefers` ranking', () => 
     const { fileset } = makeRepo(files());
     const base = opts({ handlers: locateWebhookHandlers(fileset), selects: selectsAny, anchor: /upsert|idempoten/i });
     const without = surfaceDelegatedCandidates(fileset, base);
-    const withNoop = surfaceDelegatedCandidates(fileset, { ...base, prefers: () => false });
+    const withNoop = surfaceDelegatedCandidates(fileset, { ...base, prefers: [() => false] });
     expect(withNoop.excerpts).toEqual(without.excerpts);
     expect(withNoop.elided).toBe(without.elided);
+  });
+});
+
+describe('DC-4 — `prefers` as ordered bands', () => {
+  const MECHANISM = /withOrg|\$extends/;
+  const COLUMN = /org_id|orgId/;
+  const files = (): Record<string, string> => ({
+    'app/api/stripe/webhook/route.ts': HANDLER,
+    'app/p1.ts': 'select * from invoices; // generic\n',
+    'app/p2.ts': 'select * from invoices; // generic\n',
+    'app/p3.ts': 'select * from invoices; // generic\n',
+    'app/p4.ts': 'select * from invoices; // generic\n',
+    'lib/col.ts': 'where({ org_id: ctx.orgId });\n',
+    'lib/mech.ts': 'export const db = base.$extends(withOrg);\n',
+  });
+  const selectsAny = (c: string): boolean => /invoices|org_id|orgId|withOrg|\$extends/.test(c);
+  const banded = (fileset: Parameters<typeof surfaceDelegatedCandidates>[0]) =>
+    surfaceDelegatedCandidates(
+      fileset,
+      opts({
+        handlers: locateWebhookHandlers(fileset),
+        selects: selectsAny,
+        anchor: /invoices|org_id|withOrg/,
+        prefers: [(c: string) => MECHANISM.test(c), (c: string) => COLUMN.test(c)],
+      }),
+    );
+
+  it('fills the cap band 0 first, then band 1, then everything else', () => {
+    const { fileset } = makeRepo(files());
+    expect(banded(fileset).excerpts.map((e) => e.path)).toEqual([
+      'lib/mech.ts',
+      'lib/col.ts',
+      'app/p1.ts',
+      'app/p2.ts',
+      'app/p3.ts',
+    ]);
+  });
+
+  it('reports elidedByBand, indexed as `prefers` with a trailing unbanded entry, summing to elided', () => {
+    const { fileset } = makeRepo(files());
+    const out = banded(fileset);
+    expect(out.elidedByBand).toHaveLength(3);
+    // Both specific bands fit; only a generic file was dropped.
+    expect(out.elidedByBand).toEqual([0, 0, 1]);
+    expect(out.elidedByBand.reduce((a, b) => a + b, 0)).toBe(out.elided);
+  });
+
+  it('reports elision IN the specific bands when even those overflow the cap', () => {
+    const many: Record<string, string> = { 'app/api/stripe/webhook/route.ts': HANDLER };
+    for (const n of ['a', 'b', 'c', 'd', 'e', 'f']) many[`lib/m${n}.ts`] = 'export const db = base.$extends(withOrg);\n';
+    many['lib/z.ts'] = 'where({ org_id: 1 });\n';
+    const { fileset } = makeRepo(many);
+    const out = banded(fileset);
+    // 6 band-0 files, cap 5 → one band-0 and the lone band-1 file are lost.
+    expect(out.elidedByBand).toEqual([1, 1, 0]);
+    expect(out.elided).toBe(2);
+  });
+
+  it('a single band is byte-identical to the previous single-predicate form', () => {
+    const { fileset } = makeRepo(files());
+    const base = opts({ handlers: locateWebhookHandlers(fileset), selects: selectsAny, anchor: /invoices|org_id/ });
+    const oneBand = surfaceDelegatedCandidates(fileset, { ...base, prefers: [(c: string) => COLUMN.test(c)] });
+    // Equivalent hand-rolled two-way concat, which is what the old code did.
+    const manual = surfaceDelegatedCandidates(fileset, base).excerpts;
+    expect(oneBand.excerpts.map((e) => e.path)).toEqual(['lib/col.ts', 'app/p1.ts', 'app/p2.ts', 'app/p3.ts', 'app/p4.ts']);
+    expect(manual.map((e) => e.path)).toEqual(['app/p1.ts', 'app/p2.ts', 'app/p3.ts', 'app/p4.ts', 'lib/col.ts']);
+  });
+
+  it('no bands yields a single elidedByBand entry equal to elided (AT-23 default path)', () => {
+    const { fileset } = makeRepo(files());
+    const out = surfaceDelegatedCandidates(
+      fileset,
+      opts({ handlers: locateWebhookHandlers(fileset), selects: selectsAny, anchor: /invoices|org_id/ }),
+    );
+    expect(out.elidedByBand).toHaveLength(1);
+    expect(out.elidedByBand[0]).toBe(out.elided);
   });
 });
