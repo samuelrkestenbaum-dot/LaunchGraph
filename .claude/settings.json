@@ -1,4 +1,7 @@
 {
+  "env": {
+    "BUILD_OS_SPECIALIST_HANDOFF": "1"
+  },
   "hooks": {
     "SessionStart": [
       {
