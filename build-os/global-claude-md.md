@@ -1,4 +1,3 @@
-<!-- BUILD-OS:START (managed by project-bootstrap.sh) -->
 ## Build OS (global)
 
 This machine runs a native **Build OS** orchestrator, installed at user scope so
@@ -55,4 +54,3 @@ when you want continuity in a project.
 - **≤2 commits** per packet; **Commit-1 green in isolation**.
 - **Full proof + safety grep** before a packet closes (qa reports exact counts).
 - **Never merge/push/deploy without go.**
-<!-- BUILD-OS:END -->

@@ -11,7 +11,34 @@ HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$HOOK_DIR/hook-once.sh"
 build_os_hook_once "SessionStart" || exit 0
 
-echo "Orchestrator: ON — Build OS wired. Reminder: invoke the build-orchestrator subagent PROACTIVELY before any build packet (architecture, next steps, tool routing, \"keep going\"). It will announce its routing line 'Orchestrator: ON — routing from <file|embedded>' when it runs."
+# Project-agnostic bootstrap (P-023): this hook is the entry point Claude Code actually
+# executes, so attaching ClaudeOrchestrator to ANY project installs/updates the COMPLETE
+# runtime here — idempotently, transactionally, and without project-specific instructions.
+# Bounded + non-fatal: a bootstrap problem must never break the session.
+BOOTSTRAP="$HOOK_DIR/../../build-os/tools/project-bootstrap.sh"
+BOOT_STATUS="skipped"
+if [ -x "$BOOTSTRAP" ]; then
+  if BOOT_OUT="$(BUILD_OS_BOOTSTRAP_LOCK_WAIT=5 timeout 60 bash "$BOOTSTRAP" --target "$ROOT" 2>&1)"; then
+    case "$BOOT_OUT" in
+      *"already up to date"*) BOOT_STATUS="up to date (cached)" ;;
+      *"nothing to install"*) BOOT_STATUS="vendored/source copy — no canonical source attached, so no install was performed" ;;
+      *"installed/updated"*)  BOOT_STATUS="installed/updated" ;;
+      *)                      BOOT_STATUS="ok" ;;
+    esac
+  else
+    BOOT_STATUS="NOT APPLIED — $(printf '%s' "$BOOT_OUT" | tail -1)"
+  fi
+fi
+
+# Honest status line: ON only when the required runtime is actually present; else DEGRADED
+# with the actionable gap named. Never a false ON.
+if [ -x "$BOOTSTRAP" ]; then
+  bash "$BOOTSTRAP" --target "$ROOT" --verify 2>&1 || true
+else
+  echo "Orchestrator: DEGRADED — project-bootstrap.sh not found; runtime completeness unverified."
+fi
+echo "  bootstrap: $BOOT_STATUS"
+echo "Reminder: invoke the build-orchestrator subagent PROACTIVELY before any build packet (architecture, next steps, tool routing, \"keep going\"). Lifecycle: build-orchestrator → builder → qa + reviewer → fix loop → archivist. If a prescribed agent cannot run, say so and use a documented fallback — never do its work silently inline."
 echo
 
 # Auto-provision persistent local accelerators (P-004): non-blocking, non-fatal,
