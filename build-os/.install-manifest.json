@@ -2,7 +2,7 @@
   "runtime_version": "1.0.0",
   "source_sha": "0a63f668aab1fd994a8448834dec50175272405e",
   "source_repo": "ClaudeOrchestrator",
-  "installed_at": "2026-07-26T15:41:46+00:00",
+  "installed_at": "2026-07-27T12:31:40+00:00",
   "agents": [
     "archivist",
     "build-orchestrator",
