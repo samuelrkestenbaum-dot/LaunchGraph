@@ -5,7 +5,53 @@
 > on close. One packet at a time.
 
 - **Status:** **NONE ACTIVE.**
-- **Last closed:** **T-002** — *Pin the Build OS source; close the long-carried gaps* —
+- **Last closed:** **EV-001** — *Allocate the evidence method per check; restate the
+  Phase-1 boundary* — **OPENED and CLOSED 2026-07-28.** *(This file previously read
+  "Status: NONE ACTIVE" for the whole of EV-001 and never named it — both its open and
+  its close are recorded here, at close, so the gap is visible rather than silent.)*
+  qa **GREEN on DC-1..DC-12, DC-14, DC-15; RED on DC-13, now fixed**; reviewer
+  **fix-then-pass (recorded as fixed)** with **all four required fixes applied**.
+  **ONE commit `258cc70`** (2 files, **+497/−2**) on base **`9706d87`** — originally
+  `e3c0425`, **amended once** to fold in the qa and reviewer fixes (HEAD verified to be
+  our own unpushed commit first, per the standing `--amend` constraint). **ZERO PRODUCT
+  CODE.** **≤2 commits held.** Receipt: **`build-os/receipts/EV-001.md`**.
+- **NEW SERIES `EV-NNN`** — evidence-method allocation and phase-boundary doctrine;
+  packets that produce a **durable decision artifact and ship no product code**.
+  **Forced by existing namespace rules, not preference:** `P-0NN` is **FROZEN**
+  (collides with canonical's `P-001…P-025`); **`A-S*` is reserved for the detector
+  fork** and **a non-detector packet must never consume a slice number** — taking
+  **A-S4's** number would have made a **pause look like a completion**; `T-NNN` is the
+  Build OS **runtime** series, whereas EV-001's subject is the **product's evidence
+  architecture**. **Rejected:** `D-`/`M-` (collide with Layer D / Layer M), `PL-`
+  (reads near the frozen `P-`), `S-` (reads as the A-S slice suffix).
+- **EV-001 HEADLINE — THE STRATEGIC REFRAMING IS A *RECOVERY* OF THE FOUNDING
+  ARCHITECTURE, NOT A PIVOT.** `PRODUCT_SCOPE.md` §35 already assigns the phases
+  (**`:1598` Phase 1 Repository auditor · `:1614` Phase 2 AGENT COORDINATOR · `:1626`
+  Phase 3 PROVIDER INSPECTOR AND ROUTER · `:1640` Phase 6 VERIFICATION**) and the Phase
+  1 spec's §13 already defers most of the allocation (`:646`, **`:647` external-side
+  resolution of LG-003/010/012/014/015**, `:648`, `:651`). **Recording "Phase 2" for
+  provider/live evidence would have been WRONG** — Phase 2 is the agent coordinator —
+  **and would have implied the numbering was informal, which is the crack the boundary
+  leak comes through.** **LG-009 is the SINGLE genuine departure from the spec**
+  (`P1§3:120` marks it `External component: No`; it is **absent** from §13's `:647`
+  row) and is recorded as a **PROPOSED** amendment (§9.1), **NOT enacted** — **`P1§3`'s
+  cell wins today.**
+- **EV-001 NUMBERS:** tests **387 / 30**; typecheck **exit 0**; eval **11/11 · 0 blocker
+  FPs**; diff **exactly 2 files**; subtrees byte-identical (`src` `30f116ff`, `tests`
+  `496e919b`, `bin` `49442941`, `build-os` `b4be19ff`, `.claude` `1c0e5943`);
+  **SIXTH consecutive zero-fixture-movement packet** (`fixtures` tree
+  `a981446bac76039147d93efedd14a092c2aeadc1`); **assertion budget 0**;
+  **`P1§3`/`§10`/`§13` byte-identical base↔HEAD**; both panels **15 unique ids, exactly
+  30 `^| LG-` lines**; **boundary grep — zero imperatives, zero SDK names, ZERO
+  URL/host literals doc-wide**; safety grep clean; ClaudeOrchestrator clean at
+  `0a63f66`.
+- **EV-001 — NO SECOND EYES.** `codex` absent from PATH, no plugin route, and the only
+  live Codex channel is the **GitHub PR bot, which needs a push**. **No independent
+  second-model pass happened on EV-001 — do not record one, and do not read T-002's
+  "second eyes obtained" as covering it.** **Standing qualifier: PROSE REVIEW IS WEAKER
+  EVIDENCE THAN CODE REVIEW** — no test fails if a sentence is misread; the failure
+  mode is a reading three sessions from now under delivery pressure.
+- **Previously closed:** **T-002** — *Pin the Build OS source; close the long-carried gaps* —
   **CLOSED 2026-07-27**. qa **GREEN (DC-1..DC-7)**, DC-8 recorded as a finding;
   reviewer **fix-then-pass (recorded as fixed)**. **One commit `c7baff9`** (2 files,
   +3/−2) on base **`8652bac`**; a local `git remote set-head` repair rode along (a ref
@@ -61,18 +107,66 @@
   mutates only `data["hooks"]`, so **the gate survives every canonical refresh**.
 - **A-S3 headline outcome (unchanged):** **LG-009 shipped with BOTH deterministic
   branches withheld** — no `confirmed` fail, no `confirmed` pass.
-- **Detector coverage — UNCHANGED BY T-001 AND UNCHANGED BY T-002, and record it
+- **Detector coverage — UNCHANGED BY T-001, T-002 AND EV-001, and record it
   QUALIFIED: 11 of 15 implemented, of which 8 can move an offline decision; 3 (LG-005,
-  LG-006's M half, LG-009) are online-only or partly so.** Neither T-001 nor T-002
-  touched a detector, a test, or a fixture. **"11 of 15" must never stand unqualified.** Tests **387 / 30**; eval
-  **11 fixtures / 11-of-11 / 0 blocker FPs**; **FIFTH consecutive
+  LG-006's M half, LG-009) are online-only or partly so.** None of the three touched a
+  detector, a test, or a fixture. **"11 of 15" must never stand unqualified.** Tests
+  **387 / 30**; eval **11 fixtures / 11-of-11 / 0 blocker FPs**; **SIXTH consecutive
   zero-fixture-movement packet** (`fixtures/` tree
-  `a981446bac76039147d93efedd14a092c2aeadc1` — A-S1c, A-S2, A-S3, T-001, T-002);
-  **assertion budget 0 spent at A-S3, T-001 AND T-002.**
+  `a981446bac76039147d93efedd14a092c2aeadc1` — A-S1c, A-S2, A-S3, T-001, T-002,
+  EV-001); **assertion budget 0 spent at A-S3, T-001, T-002 AND EV-001.**
+- **THE TEST-DATA POLICY REMAINS IN FORCE ON EVERY SURFACE** — fixtures, tests,
+  receipts, memory. Fake provider-key literals keep **short suffixes (<20 contiguous
+  alphanumerics)** and avoid any Sentry-DSN shape. **Resolve push protection this way,
+  NEVER by allowlisting a secret.**
+- **THE SELF-UPDATING BOOTSTRAP IS SELF-TRIGGERING AND THE PIN FAILS OPEN** (T-002
+  residue TOP ITEM). **Run `git status` on managed paths before ANY `build-os` commit.**
+  Honoured at EV-001 close: the tree was clean before the receipt and memory writes.
 
 ---
 
-## Next — **A-S4: a staged CANDIDATE awaiting orchestrator shaping + explicit go**
+## Next — **LG-005 delegated-helper hardening (staged candidate)**; **A-S4 is PAUSED**
+
+### THE NEXT PACKET SHOULD BE CODE — staged candidate: **LG-005 delegated-helper hardening**
+
+**Not shaped. Not authorized. Do not start.** The orchestrator shapes it; the user
+gives the go.
+
+- **WHY, AND IT IS A TRAJECTORY ARGUMENT, NOT A PREFERENCE: EV-001 IS THE THIRD
+  CONSECUTIVE PACKET WITH ZERO DETECTOR MOVEMENT** (T-001, T-002, EV-001) **against
+  FOUR unimplemented detectors (LG-007, LG-011, LG-012, LG-013) and TWO named open
+  product defects. Doctrine is now well-capitalized relative to code.** Each packet was
+  individually justified; **the PATTERN is the risk.**
+- **Target: `src/checks/lg005.ts:203` — the `selects` predicate** (EV-001 §7.1). A
+  webhook delegating to a helper that is **idempotent by construction** carries none of
+  the event-id / upsert / dedup markers, so **`selects` EXCLUDES it** — the model cannot
+  distinguish that safe path from a helper that inserts or mails on **every** delivery,
+  **yet LG-005's verdict can still become a BLOCKER.** **Defeater class 6**, and an
+  **ALLOWLIST OF POSITIVES where the governing rule requires a DENYLIST OF DEFEATERS.**
+- **LINE NUMBER: `:203`, NOT `:205`.** Codex's citation (carried through T-002) is **off
+  by two**: `:203` is `selects` (excluding), `:205` is `prefers` (ranking, excludes
+  nothing). Verified at source at EV-001 close. **qa flagged it and the reviewer
+  asserted the opposite; only direct verification settled it.**
+- **WHY THIS ONE:** it is a **shipped, repository-authoritative detector that can
+  currently manufacture a false blocker**, and **no provider and no probe can fix it** —
+  it sits squarely inside Phase 1's own authority. **Hardening it is a better use of the
+  same effort than a twelfth detector, and it HONOURS the A-S4 pause rather than working
+  around it.**
+- **A companion, NOT a substitute:** LG-009's unbanded elision (EV-001 §7.2) —
+  `src/checks/lg009.ts:423` sums only `elidedByBand[0] + [1]`, omitting **exactly index
+  2**, the trailing unbanded slot (`prefers` has **exactly two** predicates at
+  `lg009.ts:412-415`, so `elidedByBand.length === 3`). **Establish the band count from
+  the code, not from any report.**
+
+---
+
+### **A-S4 — PAUSED BY USER DIRECTIVE (2026-07-28). NOT CANCELLED, NOT ABANDONED, NOT SUPERSEDED.**
+
+**Paused by the user; recorded by the archivist at EV-001 close.** **THE THESIS IS NOT
+ABANDONED; THE BUILD SEQUENCE IS ADJUSTED.** **ALL ELEVEN BINDING SHAPING INPUTS BELOW
+ARE PRESERVED IN FULL AND DELIBERATELY NOT CLEARED** — they remain binding the moment
+A-S4 resumes. **EV-001 did NOT consume A-S4's slice number**, precisely so that a
+**pause could never be mistaken for a completion**.
 
 **Not shaped. Not authorized. Do not start.** The orchestrator shapes it; the user
 gives the go. **T-001 did not alter a single one of A-S4's shaping inputs**, and
@@ -162,7 +256,13 @@ LG-005 and LG-009 and they bear directly on WHICH DETECTOR IS SAFEST TO BUILD NE
     **denylist of defeaters, NOT allowlist of positives.** It also **sharpens** the
     standing "`prefers` re-weights, it does not cure" residue. **Independently sourced —
     not a Claude self-review.** **Not fixed at T-002: findings on CLOSED receipts are
-    input to a FUTURE packet, never a reopening.**
+    input to a FUTURE packet, never a reopening.** **CORRECTED AT EV-001 — THE SITE IS
+    `src/checks/lg005.ts:203` (`selects`), NOT `:205` (`prefers`, a RANKING predicate
+    that excludes nothing). Codex's citation is off by two; the defect is real.** qa
+    flagged it (DC-13) and the reviewer **independently asserted the opposite** — only
+    **direct verification of the source** settled it. **Still unfixed at EV-001: §7.1
+    LOCATED and owner-assigned it, and repaired nothing.** **This is now the STAGED
+    CANDIDATE for the next packet — see the section above.**
 11. **(NEW AT T-002, CODEX) LG-009's `incompleteSurface` IGNORES THE UNBANDED REMAINDER —
     `src/checks/lg009.ts:424`, a REAL DEFECT ON CLOSED A-S3 WORK.** When five preferred
     files fill the cap and an **additional table-name-only candidate holds the real
@@ -172,7 +272,16 @@ LG-005 and LG-009 and they bear directly on WHICH DETECTOR IS SAFEST TO BUILD NE
     was deliberately withheld**. **DC-11 must account for the trailing generic band, or
     PROVE those candidates cannot contain scoping.** This **extends A-S2's "incompleteness
     WITHIN a band" to the UNBANDED REMAINDER** — exactly the asymmetry DC-11 was built to
-    guarantee. **Not fixed at T-002.** Same append-only rule.
+    guarantee. **Not fixed at T-002.** Same append-only rule. **BAND COUNT ESTABLISHED
+    FROM SOURCE AT EV-001, AND IT NARROWS THE HOLE:** `src/scan/surface.ts:174` sizes
+    `elidedByBand` as **`bands.length + 1`** (the `+1` is the trailing unbanded slot) and
+    `src/checks/lg009.ts:423` sums **only `[0] + [1]`**; **`lg009.ts:412-415` passes
+    EXACTLY TWO `prefers` predicates**, so `elidedByBand.length === 3` and `[0]+[1]`
+    omits **exactly index 2 — the unbanded remainder, and nothing else.** **"Three
+    ordered bands" was a misreading of `elidedByBand`'s LENGTH.** The hole is precisely
+    what Codex described — **not wider.** *(Line cite is `:423`, not `:424`.)*
+    **The fix packet must still establish this from the code, not from any report.**
+    **Still unfixed at EV-001: §7.2 located it only.**
 
 ### Carry-forward constraints (unchanged, binding)
 
@@ -260,11 +369,15 @@ receipt table, which supersedes A-S2's.
   authorized** ("Both: create main AND PR now"). **No merge is proposed or authorized.**
 
 ---
-_Cleared by the archivist on close of **T-002** (2026-07-27); prior clear on close of
-**T-001** (2026-07-26). **A-S4 remains a STAGED CANDIDATE ONLY — unshaped and
-unauthorized** — awaiting orchestrator shaping and the user's explicit go. Its nine
-original binding shaping inputs were carried forward unaltered; **T-002 added inputs 10
-and 11 (the two Codex-found defects in LG-005 and LG-009) and discharged the two process
-inputs (8, the false no-default-branch premise, and 9, the mis-diagnosed second-eyes
-gap). Detector coverage remains QUALIFIED — 11 of 15 implemented, 8 offline-decision-moving.
-The TEST-DATA POLICY remains in force on every surface.**_
+_Cleared by the archivist on close of **EV-001** (2026-07-28); prior clears on close of
+**T-002** (2026-07-27) and **T-001** (2026-07-26). **EV-001's open AND close are both
+recorded above** — this file read "Status: NONE ACTIVE" for the whole of that packet and
+never named it, and the gap is recorded rather than papered over. **A-S4 is PAUSED BY
+USER DIRECTIVE (2026-07-28) — NOT cancelled and NOT superseded — with ALL ELEVEN binding
+shaping inputs PRESERVED, NOT CLEARED. The thesis is not abandoned; the build sequence is
+adjusted.** **The next packet should be CODE**: the staged candidate is **LG-005
+delegated-helper hardening at `src/checks/lg005.ts:203`** — unshaped and unauthorized,
+awaiting orchestrator shaping and the user's explicit go. **Detector coverage remains
+QUALIFIED — 11 of 15 implemented, 8 offline-decision-moving. The TEST-DATA POLICY remains
+in force on every surface. The self-updating bootstrap is self-triggering and the pin
+fails open — run `git status` on managed paths before any `build-os` commit.**_

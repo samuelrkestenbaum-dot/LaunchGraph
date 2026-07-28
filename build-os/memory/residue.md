@@ -6,6 +6,22 @@
 
 ## TOP ITEM — surface this first
 
+- **(EV-001) TRAJECTORY — THIRD CONSECUTIVE PACKET WITH ZERO DETECTOR MOVEMENT. THE NEXT PACKET SHOULD BE CODE. NEW TOP ITEM.**
+  - **T-001, T-002, EV-001 all shipped zero detector change**, against **four unimplemented detectors (LG-007, LG-011, LG-012, LG-013)** and **two named open product defects**.
+  - **Doctrine is now well-capitalized relative to code.** Each of the three packets was individually justified. **The PATTERN is the risk, not any one packet.**
+  - **Leading candidate: LG-005's delegated-helper blind spot — `src/checks/lg005.ts:203`, EV-001 §7.1.** A **shipped, repository-authoritative** detector that can **currently manufacture a false blocker**, and **no provider and no probe can fix it** — it sits squarely inside Phase 1's own authority.
+  - **Hardening it is a better use of the same effort than a twelfth detector, and it HONOURS the A-S4 pause rather than working around it.**
+
+- **(EV-001) THE CODEX `lg005.ts:205` CITATION IS OFF BY TWO. THE CORRECT SITE IS `src/checks/lg005.ts:203`. FIX THE LINE NUMBER BEFORE ACTING ON THE DEFECT.**
+  - Verified at source (tree `258cc70`): **`:203` is `selects:` (the EXCLUDING predicate)**, `:204` is `anchor:`, **`:205` is `prefers:` — a RANKING predicate that excludes nothing.**
+  - **The defect is REAL; only the line number was wrong.** The exclusion the Codex finding describes happens at **`selects`**, not at `prefers`.
+  - **PROCESS NOTE, AND IT IS THE DURABLE PART: qa flagged this (DC-13 RED) and the reviewer INDEPENDENTLY ASSERTED THE OPPOSITE — that `:205` IS `selects`. Two independent reviews disagreed on a ONE-LINE FACT, and only DIRECT VERIFICATION OF THE SOURCE settled it. Neither report's confidence was evidence.**
+  - The wrong citation is carried in this file and in `current_state.md` from T-002 (inherited from Codex). **Receipts are append-only — `T-002.md` is NOT edited; the correction lives in `build-os/receipts/EV-001.md` and here.**
+
+- **(EV-001) NO SECOND EYES ON EV-001. DO NOT LET T-002'S "SECOND EYES OBTAINED" BE READ AS COVERING IT.**
+  - `codex` is **absent from PATH**; **no plugin route exists**; the only live Codex channel is the **GitHub PR bot, which requires a push** — and **nothing was pushed**.
+  - **STANDING QUALIFIER, from the reviewer's own caveat, and it now travels with every doctrine packet: PROSE REVIEW IS WEAKER EVIDENCE THAN CODE REVIEW.** There is **no test that fails if a sentence is misread**, and the failure mode is **a reading three sessions from now, under delivery pressure.** That is why EV-001's four reviewer findings were treated as required fixes, not style notes.
+
 - **(T-002) THE PIN FAILS OPEN IN BOTH DIRECTIONS — NEW TOP ITEM. READ THIS BEFORE MOVING, RE-CLONING, OR RELOCATING THIS REPO.**
   - The mitigation applied at `c7baff9` is `env.BUILD_OS_SOURCE = "/home/user/LaunchGraph"` — **an ABSOLUTE PATH**. Reviewer-verified, both directions:
   - **(a) PATH GONE.** If `/home/user/LaunchGraph` no longer exists, `is_canonical_src()` fails and `resolve_source()` (`project-bootstrap.sh:63-76`) **falls through** to `/home/user/ClaudeOrchestrator`, `$HOME/ClaudeOrchestrator`, **or `$(dirname TARGET)/ClaudeOrchestrator`**. The overwrite returns **SILENTLY, with the key still present and LOOKING APPLIED.**
@@ -60,6 +76,8 @@
 
 ## Standing constraints (bind every future slice)
 
+- **(EV-001) NEW — PHASE NUMBERS ARE CITATIONS, NOT SHORTHAND. `PRODUCT_SCOPE.md` §35 IS THE AUTHORITY.** **`:1598` Phase 1 Repository auditor · `:1614` Phase 2 AGENT COORDINATOR · `:1626` Phase 3 PROVIDER INSPECTOR AND ROUTER · `:1640` Phase 6 VERIFICATION.** **Writing "Phase 2" for provider or live evidence is WRONG** — Phase 2 is the agent coordinator — **and worse than wrong, it implies the numbering is informal, which is exactly the crack the boundary leak comes through.** The Phase 1 spec's §13 already defers `:646` provider API inspection, **`:647` external-side resolution of LG-003/010/012/014/015**, `:648` DNS/TLS/domain probes and `:651` journey execution + unqualified `Ready` to Phase 3 / Phase 6. **Cite the line; do not paraphrase the phase.**
+- **(EV-001) NEW — THE EVIDENCE-ALLOCATION DOCUMENT GRANTS NOTHING, AND ITS NORMATIVE SURFACE IS ENUMERATED.** `specs/evidence-allocation-and-phase-boundaries.md` is normative for **exactly two things — evidence-source allocation and phase ownership — PLUS §4 (FORBIDDEN), §5.3 (GATE) and §6 (LG-009 non-deletion), enumerated as additionally normative and framed as RESTRICTIONS ONLY.** **None of it may be read as permission.** `P1§3` remains the sole authority for what a check MEANS. **§6's release valve is CONJUNCTIVE**: reinstating an LG-009 certifying branch needs **all three** R1 requirements — (1) a real SQL statement parser, (2) a default-deny defeater denylist, (3) evidence the connecting role is subject to the policies — and **Phase-3 provider evidence discharges (3) ALONE and is explicitly NOT grounds for reinstatement.** **§5.3's gate does NOT backstop this**, because reinstating the `confirmed` **fail** branch need not make Rule 7 reachable. **There is no per-check `ready`** — `P1§3` fixes per-check outcomes; `ready` is a global Rule 7 decision, and Rule 7 stays blocked while LG-012's Phase-6 proof is outstanding.
 - **(T-001) NEW — SURFACE-VERIFIED TOOL INVENTORY (2026-07-26, Claude Code on the web / remote container). THE ROUTER'S CAPABILITY TABLES ARE HOST-SPECIFIC (P-012, a Mac) AND ARE FALSE ON THIS SURFACE.** Live evidence gathered this session:
   - **CONTRADICTED — the router UNDERSTATES:** `tool_router.md` says *"Not live (out of scope until enabled): Stripe & Cloudflare Developer Platform (installed, need auth)"*. `ListConnectors` here reports **both `connected: true, enabledInChat: true`**.
   - **CONTRADICTED — the router OVERSTATES:** the *"Build accelerators (verified 2026-07 — P-012)"* table marks **Serena / Repomix / ccusage / Trail of Bits / Context Mode ACTIVE**. On this surface `serena`, `repomix`, `ccusage` and `codex` are **all absent from PATH**; `claude plugin list` returns *"No plugins installed"*; there is **no `~/.claude/plugins` and no `~/.claude/settings.json`**. **EVERY "ACTIVE" CLAIM IN THAT TABLE IS FALSE HERE.**
@@ -97,6 +115,9 @@
 
 ## Deferred (follow-up packets)
 
+- **(EV-001) SECTION-NUMBER COLLISION ACROSS THE TWO SPEC DOCUMENTS — reviewer item 7, NOT APPLIED, out of budget.** `specs/evidence-allocation-and-phase-boundaries.md` and `specs/phase-1-repository-auditor.md` **both** have a §3, §7 and §8, and bare `§3` / `§7` / `§8` are used **in both senses**. §1 qualifies the path at the one place it matters most, and **`P1§` qualifiers were introduced in the repaired passages only** — a **full sweep is owed**. Until then, **write `P1§3`, never bare `§3`**.
+- **(EV-001) THE `:116` "and/or" PARAPHRASE DRIFT ON LG-013 — NOT APPLIED.** The document's paraphrase of the LG-013 row drifts from the spec's `and/or`. Low consequence; sweep with the section-number pass.
+- **(EV-001) §9'S AMENDMENTS ARE *PROPOSED*, NOT ENACTED — INCLUDING §9.1 (LG-009's PRIMARY AUTHORITY MOVING TO THE PROVIDER).** **`P1§3:120`'s `External component: No` WINS TODAY.** Both matrix panels and §3.7's title carry the divergence marker. **A future session must not read §3.7 as a decision already taken.** Enacting any of §9 is a **separate packet against `P1§3`/`P1§13`**, not a doc edit.
 - **(T-001) THE TOOL ROUTER HAS NO ROW FOR FRAMEWORK / TOOLING ADOPTION.** T-001 routed from the **Build** row with reviewer dropped, then needed a reviewer anyway (it found the central defect). A `T-` row is owed — **but `tool_router.md` is MANAGED**, so the row belongs **upstream in canonical ClaudeOrchestrator**, not as a local edit that the next bootstrap reverts. Record the constraint before someone "fixes" it locally.
 - **(T-001) MANIFEST TIMESTAMP — TWO READINGS, BOTH RECORDED.** `build-os/.install-manifest.json` embeds `installed_at` (T-001 moved it `2026-07-26T15:32:55+00:00` → `2026-07-26T15:41:46+00:00`). **Reviewer's read:** the cache gate means it is rewritten **only on a real install**, so a new timestamp is **accurate rather than noise**. **qa's read:** expected one-line churn. **A future session must not read this timestamp as evidence of anything except the time of the last write.**
 - **(T-001) INERT BUT ARMED.** `.claude/hooks/session-start-build-os.sh:48-51` **background-launches `$ROOT/install-accelerators.sh` if that file ever appears at the repo root.** It does not exist in LaunchGraph today. **Creating a file with that name at the repo root would silently start executing it on every SessionStart.**
@@ -123,7 +144,7 @@
 - (P-003-S3) **SPEC-DISCREPANCY NOTE** — the P-003-S3 go-instructions mis-attributed LG-011's "localhost / preview host" language (§3) to LG-015. §3 LG-015's only fail conditions are "no canonical production URL configured anywhere, or configured values disagree." The builder's presence-not-correctness handling is spec-faithful. No action — recorded so future slices do not propagate the confusion. **Relevant again now that LG-011 is a near-term candidate.**
 - (P-003-S4) **LG-010 domain heuristic (no PSL)** — last-two-labels match, disclosed in the docstring. Can ONLY under-warn. Non-blocking.
 - (P-003-S4) **LG-014 implicit-Sentry mechanisms** — does NOT recognize implicit release-injection / dashboard-only DSN mechanisms. Acceptable and spec-faithful. Non-blocking.
-- (P-004) **SPEC HEADER STALENESS** — `specs/phase-1-repository-auditor.md` header still says "not yet implemented." Stale now that implementation is well underway. Reconcile in a later doc pass. Non-blocking.
+- ~~(P-004) **SPEC HEADER STALENESS**~~ **RESOLVED BY EV-001 (`258cc70`)** — the header now reads *"approved scope; implementation underway, one gated packet at a time"* and cross-references the evidence-allocation document. **The "one gated packet at a time" wording is LOAD-BEARING and was a REVIEWER-REQUIRED FIX: the first replacement removed the spec's ONLY explicit-go sentence, leaving the authoritative document with no permission language anywhere — in the very packet whose purpose was to stop permission being read into prose.** Still exactly +2/−2.
 - (P-004) **`report.repo.commit` stays null** — the banner's `@<commit>` is cosmetic. Wire it in a later polish pass. Non-blocking.
 - (P-004) **BANNER LOCATOR ARTIFACT on fixture scans** — cosmetic, cannot occur on a real repo. Non-blocking.
 - (P-004 → A-S1b) **`eval` runs over the 11 present fixtures only** — golden/, hostile/, and the remaining model-layer broken fixtures still don't exist, so **§9.3's 15/15-recall and 18/18-decision thresholds remain a PROGRAM-level gate**. **A-S2 and A-S3 both moved eval not at all** (A-S3 by design — LG-009 is offline-inert). Non-blocking.
@@ -142,18 +163,20 @@
 - **(A-S1c → A-S2 → A-S3) THE `.sql`/`.prisma` PROMPT-SURFACE SEC-5 ADJUDICATION IS STILL OWED.** A `.sql` migration or `.prisma` schema still never enters `request.excerpts`. Admitting structured non-source text into a prompt is a **real security decision**, not something to smuggle into a detector packet. **A-S3 did not need it** — LG-009's Layer D read those carriers directly, with no new capability and no change to `isCodeFile`/`isModelSurfaceableFile`/`PROSE_EXT_RE`. Still owed for `request.excerpts`.
 - **(A-S2 → A-S3) PER-CHECK MODEL-ERROR DEGRADATION** (Trap 5) — current propagate-semantics pinned by an explicit test. Still deferred.
 
-- **(T-002, CODEX) P1 `src/checks/lg005.ts:205` — "SURFACE DELEGATED SIDE-EFFECT IMPLEMENTATIONS." A REAL PRODUCT DEFECT ON CLOSED WORK (A-S2). NEW BINDING SHAPING INPUT FOR A-S4.**
+- **(T-002, CODEX) P1 `src/checks/lg005.ts:205` — "SURFACE DELEGATED SIDE-EFFECT IMPLEMENTATIONS." A REAL PRODUCT DEFECT ON CLOSED WORK (A-S2). BINDING SHAPING INPUT. — **LINE NUMBER CORRECTED AT EV-001: THE SITE IS `src/checks/lg005.ts:203` (`selects`), NOT `:205` (`prefers`). Codex's citation was off by two; the defect is real. AND THIS IS NOW THE LEADING CANDIDATE FOR THE NEXT PACKET (see TOP ITEM).**
   - When a webhook **delegates** to a helper that is **idempotent by construction** (e.g. a plain state-reconciliation `UPDATE`), the `selects` predicate **EXCLUDES it**, because it carries none of the event-id / upsert / dedup markers.
   - **The model therefore cannot see the code needed to distinguish that safe path from a helper that inserts, or sends mail, on EVERY delivery — yet LG-005's verdict can still become a BLOCKER.**
   - This is **defeater class 6** (a collection boundary that never read it) and a direct instance of the project's own governing rule being violated: **it is an ALLOWLIST OF POSITIVES, not a DENYLIST OF DEFEATERS.**
   - It **SHARPENS** the standing "`prefers` re-weights, it does not cure" item above.
   - **NOT FIXED AT T-002, DELIBERATELY. Findings on CLOSED receipts are input to a FUTURE packet, never a reopening. Receipts are append-only.**
+  - **STILL NOT FIXED AT EV-001, DELIBERATELY** — EV-001 §7.1 **LOCATED and OWNER-ASSIGNED it; it repaired nothing.** A doctrine packet may name a defect; it may not quietly fix one.
 
 - **(T-002, CODEX) P1 `src/checks/lg009.ts:424` — "TREAT EVERY ELIDED LG-009 CANDIDATE AS INCOMPLETE." A REAL PRODUCT DEFECT ON CLOSED WORK (A-S3). NEW BINDING SHAPING INPUT FOR A-S4.**
   - When five preferred files fill the cap and an **additional table-name-only candidate holds the real isolation logic** (e.g. a relation predicate not spelling a recognized tenant column), **`incompleteSurface` IGNORES the omitted unmatched/trailing band**, so a model `fail` is accepted as an **inferred blocker** although **the exonerating query was deliberately withheld**.
   - **DC-11 must account for the trailing generic band, or PROVE those candidates cannot contain scoping.**
   - This **extends A-S2's "incompleteness WITHIN a band" to the UNBANDED REMAINDER** — and it is exactly the asymmetry DC-11 was built to guarantee.
-  - **NOT FIXED AT T-002, DELIBERATELY.** Same append-only rule.
+  - **BAND COUNT ESTABLISHED FROM SOURCE AT EV-001 — AND IT NARROWS, NOT WIDENS, THE HOLE.** `src/scan/surface.ts:174` sizes `elidedByBand` as **`bands.length + 1`** (the `+1` is the **trailing unbanded slot**); `src/checks/lg009.ts:423` sums **only `[0] + [1]`**. The open worry was that LG-009 ranks across **THREE** bands, in which case `[0]+[1]` would miss **a real band AND the trailing slot**. **IT DOES NOT: `src/checks/lg009.ts:412-415` passes EXACTLY TWO `prefers` predicates** (`SCOPING_MECHANISM_RE`, `TENANT_COLUMN_RE`), so **`bands.length === 2`, `elidedByBand.length === 3`, and `[0]+[1]` omits EXACTLY index 2 — the unbanded remainder, and nothing else.** **"Three ordered bands" was a misreading of `elidedByBand`'s LENGTH, not of the band count.** **The hole is precisely what Codex described.** *(The fix packet should still re-derive this from the code rather than from this note — that is the whole lesson of the `lg005.ts:203` correction above.)*
+  - **NOT FIXED AT T-002, DELIBERATELY. STILL NOT FIXED AT EV-001** — EV-001 §7.2 located it only. Same append-only rule.
 
 - **(T-002, CODEX) P2 `build-os/tools/project-bootstrap.sh:209` — "VALIDATE MERGED SETTINGS AND `CLAUDE.md` BEFORE CACHE EXIT." AN UPSTREAM ClaudeOrchestrator DEFECT — OWED UPSTREAM, NOT FIXABLE HERE.**
   - When the canonical SHA and the manifest-listed file hashes match but the managed `CLAUDE.md` block **or** either `.claude/settings.json` hook entry has **DRIFTED**, the **cache path exits before either merge runs**.
@@ -222,9 +245,12 @@
 
 - **(T-002, 2026-07-27) `c7baff9` IS LOCAL; the remote branch ref is at `8652bac`. `build-os/receipts/T-002.md` AND THESE MEMORY UPDATES ARE NOT COMMITTED.** The user handles commit and push, per the standing "hold all `build-os/` commits until close" constraint. **≤2 commits held (one commit).** Beyond the explicitly authorized `main` creation and PR #1: **nothing merged, deployed, published, or allowlisted; no secrets touched; NO REAL MODEL API CALL occurred in T-002.**
 
+- **(EV-001, 2026-07-28) `258cc70` IS LOCAL AND UNPUSHED. `origin/main` IS AT `8652bac` — THREE COMMITS ARE UNPUSHED (`c7baff9`, `9706d87`, `258cc70`).** `build-os/receipts/EV-001.md` and these memory updates are **NOT committed**; the user handles commit and push, per the standing "hold all `build-os/` commits until close" constraint. **≤2 commits held (one commit).** **Nothing merged, deployed, published, or allowlisted; no secrets touched; NO REAL MODEL API CALL occurred in EV-001** — the packet ran no scanner and no model client.
+- **(EV-001) A-S4 REMAINS *PAUSED BY USER DIRECTIVE*, NOT CANCELLED.** All **eleven binding shaping inputs are PRESERVED, NOT CLEARED**, in `build-os/packets/active_packet.md`. **The thesis is not abandoned; the build sequence is adjusted.** **EV-001 deliberately did NOT consume A-S4's slice number** — a non-detector packet must never take a slice number, and doing so would have made a **pause look like a completion**.
+
 ---
 _Append-only working notes. Updated by the archivist on close of P-001
 (2026-07-23), P-002 (2026-07-23), P-003-S1 (2026-07-23), P-003-S2 (2026-07-23),
 P-003-S3 (2026-07-23), P-003-S4 (2026-07-23), P-004 (2026-07-23), P-005
 (2026-07-23), A-S1b (2026-07-25), A-S1c (2026-07-25), A-S2 (2026-07-25),
-A-S3 (2026-07-26), T-001 (2026-07-26), and **T-002 (2026-07-27)**._
+A-S3 (2026-07-26), T-001 (2026-07-26), T-002 (2026-07-27), and **EV-001 (2026-07-28)**._
