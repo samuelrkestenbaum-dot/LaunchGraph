@@ -1,7 +1,7 @@
 # SugarBee.ai Phase 1 Specification: Repository Auditor
 
-- **Status:** Specification — approved scope, not yet implemented.
-  Implementation awaits explicit go.
+- **Status:** Specification — approved scope; implementation underway, one gated packet at a time.
+  Evidence allocation: [phase boundaries](evidence-allocation-and-phase-boundaries.md).
 - **Parent documents:** [`PRODUCT_SCOPE.md`](../PRODUCT_SCOPE.md) Part I
   §35 (Phase 1) and Part II (the narrowed audit-first wedge).
 - **Mode:** Strictly read-only. No provider changes, no production
