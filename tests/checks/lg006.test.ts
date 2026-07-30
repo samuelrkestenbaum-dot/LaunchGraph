@@ -243,7 +243,12 @@ export async function POST(req: Request) {
   });
 
   it('emits an inferred blocker FAIL from a fake fail judgment, severity from the registry, capped ≤ 0.9', async () => {
-    const { fileset } = makeRepo(DELEGATING_REPO);
+    // H-003 repair: re-based from DELEGATING_REPO onto an inline-branch
+    // handler. The delegating handler carries a local runtime import, so the
+    // delegated-opacity guard now demotes its model fail to unknown; the
+    // inferred blocker legitimately flows only where the cancellation path is
+    // inline. Assertions are unchanged.
+    const { fileset } = makeRepo({ 'app/api/stripe/webhook/route.ts': HANDLER_WITH_DOWNGRADE });
     const candidates = surfaceLg006Candidates(fileset) as Lg006Applicable;
     const [finding] = interpretLg006(candidates, await judge(candidates, 'fail', 0.85));
     expect(finding?.outcome).toBe('fail');
@@ -256,7 +261,8 @@ export async function POST(req: Request) {
   });
 
   it('caps an over-confident fail judgment at 0.9', async () => {
-    const { fileset } = makeRepo(DELEGATING_REPO);
+    // H-003: inline-branch repo for the same reason as the test above.
+    const { fileset } = makeRepo({ 'app/api/stripe/webhook/route.ts': HANDLER_WITH_DOWNGRADE });
     const candidates = surfaceLg006Candidates(fileset) as Lg006Applicable;
     const [finding] = interpretLg006(candidates, await judge(candidates, 'fail', 0.99));
     expect(finding?.confidence).toBe(0.9);
@@ -271,7 +277,8 @@ export async function POST(req: Request) {
   });
 
   it('keeps a low-confidence fail judgment inferred at the detector level (engine reclassifies, not the detector)', async () => {
-    const { fileset } = makeRepo(DELEGATING_REPO);
+    // H-003: inline-branch repo for the same reason as the tests above.
+    const { fileset } = makeRepo({ 'app/api/stripe/webhook/route.ts': HANDLER_WITH_DOWNGRADE });
     const candidates = surfaceLg006Candidates(fileset) as Lg006Applicable;
     const [finding] = interpretLg006(candidates, await judge(candidates, 'fail', 0.5));
     expect(finding?.classification).toBe('inferred');
@@ -412,6 +419,170 @@ describe('LG-006 surfacing contract (C3) — the model sees what the handler del
     const { fileset } = makeRepo(DELEGATING_REPO);
     const candidates = surfaceLg006Candidates(fileset) as Lg006Applicable;
     expect(candidates.request.question).not.toMatch(/NOTE ON COMPLETENESS/);
+  });
+});
+
+/**
+ * H-003 repro shape: the handler names the cancellation branch itself (so the
+ * repo is NOT settled deterministically) but delegates the actual downgrade
+ * via a LOCAL runtime import to a lib module that performs it WITHOUT naming
+ * any cancellation event. The conjunctive `selects` predicate therefore
+ * excludes the delegate from the surface, zero files match, and no elision
+ * disclosure transmits — the model judges a surface that cannot show the
+ * downgrade. Helper deliberately in `lib/`, NEVER under a webhook-ish `/api/`
+ * path: there it would be located as a HANDLER and arm the guard through its
+ * own import, making the repro vacuous (the H-001 standing lesson).
+ */
+const HANDLER_DELEGATING_DOWNGRADE = `import Stripe from 'stripe';
+import { applyPlanChange } from '../../../../lib/plan-state';
+export async function POST(req: Request) {
+  const sig = req.headers.get('stripe-signature')!;
+  const event = stripe.webhooks.constructEvent(await req.text(), sig, process.env.STRIPE_WEBHOOK_SECRET!);
+  switch (event.type) {
+    case 'customer.subscription.deleted':
+      await applyPlanChange(event.data.object.customer);
+      break;
+    case 'checkout.session.completed':
+      await grant(event);
+      break;
+  }
+  return new Response('ok');
+}
+`;
+
+/** The delegate: a real downgrade, with no cancellation event name in sight. */
+const MARKERLESS_DOWNGRADE_HELPER = `import { db } from './db';
+export async function applyPlanChange(customerId: string): Promise<void> {
+  await db.orgs.update({ where: { id: customerId }, data: { plan: 'free', entitlement: 'revoked' } });
+}
+`;
+
+describe('H-003 — the LG-006 delegated-opacity guard (asymmetric; inferred-fail only)', () => {
+  const delegatedDowngradeRepo = (): Record<string, string> => ({
+    'app/api/stripe/webhook/route.ts': HANDLER_DELEGATING_DOWNGRADE,
+    'lib/plan-state.ts': MARKERLESS_DOWNGRADE_HELPER,
+  });
+
+  it('repro SHAPE PROOF: the markerless delegate is ABSENT from the surface, and nothing discloses it', () => {
+    const { fileset } = makeRepo(delegatedDowngradeRepo());
+    const candidates = surfaceLg006Candidates(fileset) as Lg006Applicable;
+    const paths = candidates.request.excerpts.map((e) => e.path);
+    // The delegate carries no cancellation event name, so `selects` excludes it...
+    expect(paths).not.toContain('lib/plan-state.ts');
+    expect(paths.every((p) => p === 'app/api/stripe/webhook/route.ts')).toBe(true);
+    // ...and with zero matches, elided === 0, so no completeness disclosure
+    // transmits either: the model is never told anything is missing.
+    expect(candidates.request.question).not.toMatch(/NOTE ON COMPLETENESS/);
+    // Not settled — the handler itself names the branch, so the model IS asked.
+    expect(candidates.hasCancellationSignalAnywhere).toBe(true);
+  });
+
+  it('repro: a fake model FAIL over that opaque surface is demoted to unknown, reason disclosed', async () => {
+    const { fileset } = makeRepo(delegatedDowngradeRepo());
+    const candidates = surfaceLg006Candidates(fileset) as Lg006Applicable;
+    const [finding] = interpretLg006(candidates, await judge(candidates, 'fail', 0.85));
+    expect(finding?.outcome).toBe('unknown');
+    expect(finding?.outcome).not.toBe('fail');
+    expect(finding?.summary).toMatch(/local runtime import/i);
+    expect(finding?.summary).toContain('app/api/stripe/webhook/route.ts');
+    expect(finding?.summary).toContain('1 of 1');
+  });
+
+  it('invariance (a): a settled repo keeps the D blocker fail/confirmed even with an ARMED handler and a judgment', async () => {
+    // The handler delegates through a local runtime import (armed) and NO file
+    // anywhere names cancellation — the settled deterministic case. The guard
+    // must be provably unreachable from the hoisted D blocker: a directly
+    // supplied judgment of either verdict changes nothing.
+    const { fileset } = makeRepo({
+      'app/api/stripe/webhook/route.ts': `import { handleStripeEvent } from '../../../../lib/events';
+export async function POST(req: Request) {
+  await handleStripeEvent(JSON.parse(await req.text()));
+  return new Response('ok');
+}
+`,
+      'lib/events.ts': `export async function handleStripeEvent(event: any) {
+  switch (event.type) {
+    case 'checkout.session.completed':
+      await grant(event);
+      break;
+  }
+}
+`,
+    });
+    const candidates = surfaceLg006Candidates(fileset) as Lg006Applicable;
+    const offline = interpretLg006(candidates)[0];
+    for (const verdict of ['fail', 'pass'] as const) {
+      const [finding] = interpretLg006(candidates, await judge(candidates, verdict, 0.85));
+      expect(finding?.outcome, verdict).toBe('fail');
+      expect(finding?.classification, verdict).toBe('confirmed');
+      expect(finding?.confidence, verdict).toBe(1);
+      expect(finding, verdict).toEqual(offline);
+    }
+  });
+
+  it('invariance (b): prose-only signal + ARMED handler + fake PASS stays a contradictory fail (rule-5 path)', async () => {
+    // The fail-establishing fact is live and TRUE (no code file names
+    // cancellation); a model `pass` classifies contradictory and the contract
+    // forces outcome `fail`. That fail is the deterministic fact winning —
+    // classification `contradictory`, not `inferred` — so the guard must not
+    // demote it, armed handler or not.
+    const { fileset } = makeRepo({
+      'app/api/stripe/webhook/route.ts': `import { handleStripeEvent } from '../../../../lib/events';
+export async function POST(req: Request) {
+  await handleStripeEvent(JSON.parse(await req.text()));
+  return new Response('ok');
+}
+`,
+      'lib/events.ts': `export async function handleStripeEvent(event: any) {
+  switch (event.type) {
+    case 'checkout.session.completed':
+      await grant(event);
+      break;
+  }
+}
+`,
+      'README.md': 'We handle customer.subscription.deleted by revoking access.\n',
+    });
+    const candidates = surfaceLg006Candidates(fileset) as Lg006Applicable;
+    expect((candidates.request.supportingFacts ?? []).map((f) => f.id)).toEqual([
+      'fact:lg006.no-code-cancellation-signal',
+    ]);
+    const [finding] = interpretLg006(candidates, await judge(candidates, 'pass', 0.85));
+    expect(finding?.outcome).toBe('fail');
+    expect(finding?.classification).toBe('contradictory');
+  });
+
+  it('invariance (c): a fake model PASS over the armed repro repo is untouched (asymmetric by design)', async () => {
+    const { fileset } = makeRepo(delegatedDowngradeRepo());
+    const candidates = surfaceLg006Candidates(fileset) as Lg006Applicable;
+    const [finding] = interpretLg006(candidates, await judge(candidates, 'pass', 0.8));
+    expect(finding?.outcome).toBe('pass');
+    expect(finding?.classification).toBe('inferred');
+  });
+
+  it('invariance (d): offline, an ARMED handler still yields the AT-27 unknown, byte-identical summary', () => {
+    const { fileset } = makeRepo(delegatedDowngradeRepo());
+    const candidates = surfaceLg006Candidates(fileset) as Lg006Applicable;
+    const [finding] = interpretLg006(candidates);
+    expect(finding?.outcome).toBe('unknown');
+    expect(finding?.summary).toBe(
+      'Model layer disabled (offline or unconfigured); a Stripe webhook handler was surfaced deterministically and the repository does reference subscription-cancellation handling, but whether that path reaches an entitlement downgrade was not evaluated.',
+    );
+    expect(finding?.evidence).toEqual(candidates.anchors.slice(0, 1));
+  });
+
+  it('positive control: an inline-cancellation handler (ZERO local runtime imports) still fails inferred', async () => {
+    // The guard must not kill the detector: HANDLER_WITH_DOWNGRADE's only
+    // import is the bare npm `stripe` specifier (out of class), so the
+    // surfaced handler IS the cancellation path the model judged, and the
+    // inferred blocker legitimately flows.
+    const { fileset } = makeRepo({ 'app/api/stripe/webhook/route.ts': HANDLER_WITH_DOWNGRADE });
+    const candidates = surfaceLg006Candidates(fileset) as Lg006Applicable;
+    expect(candidates.handlersWithLocalRuntimeImports).toEqual([]);
+    const [finding] = interpretLg006(candidates, await judge(candidates, 'fail', 0.85));
+    expect(finding?.outcome).toBe('fail');
+    expect(finding?.classification).toBe('inferred');
+    expect(finding?.severity).toBe('blocker');
   });
 });
 

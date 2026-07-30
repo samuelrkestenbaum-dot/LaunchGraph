@@ -315,11 +315,12 @@ describe('AT-06 — broken-lg-006 fixture, scanned offline', () => {
 
 describe('scanWithModel — fake-model integration (§4.2 online path)', () => {
   it('flows an inferred blocker FAIL from the model into the decision (not_ready)', async () => {
-    // Re-based onto the delegating repo: a handler-only-no-branch repo is now
-    // settled by the deterministic layer and never reaches the model. This is
-    // still a genuine inferred-fail — the model WAS shown lib/events.ts and
-    // judged that the branch does not reach a downgrade.
-    const dir = delegatingCancellationRepo();
+    // H-003 repair: re-based from delegatingCancellationRepo onto the
+    // INLINE-side-effect repo. The delegating handler carries a local runtime
+    // import, so LG-006's delegated-opacity guard now demotes its model fail
+    // to unknown; the inferred blocker legitimately flows only where the
+    // cancellation path is inline. Assertions are unchanged.
+    const dir = inlineCancellationRepo();
     const report = await scanWithModel(dir, judgment('fail', 0.85), { now: FIXED });
     const finding = lg006(report);
     expect(finding?.outcome).toBe('fail');
@@ -377,12 +378,14 @@ describe('scanWithModel — fake-model integration (§4.2 online path)', () => {
     // DISCLOSED MEANING CHANGE: `brokenCancellationRepo()` now exercises the
     // DETERMINISTIC path (the model is never consulted), so this case proves
     // schema validity of the settled finding under `scanWithModel`. The
-    // model-derived fail path is covered by the delegating case below.
+    // model-derived fail path is covered by the inline case below (H-003:
+    // re-based from the delegating repo, whose model fail the
+    // delegated-opacity guard now demotes to unknown).
     const fail = await scanWithModel(brokenCancellationRepo(), judgment('fail', 0.9), { now: FIXED });
     const pass = await scanWithModel(correctCancellationRepo(), judgment('pass', 0.6), { now: FIXED });
     expect(validateReport(fail).errors).toEqual([]);
     expect(validateReport(pass).errors).toEqual([]);
-    const inferredFail = await scanWithModel(delegatingCancellationRepo(), judgment('fail', 0.9), { now: FIXED });
+    const inferredFail = await scanWithModel(inlineCancellationRepo(), judgment('fail', 0.9), { now: FIXED });
     expect(validateReport(inferredFail).errors).toEqual([]);
   });
 });

@@ -56,6 +56,7 @@
  */
 import { fileLines } from '../scan/collect.js';
 import type { CollectedFile, Fileset } from '../scan/collect.js';
+import { hasLocalRuntimeImport, topLevelDirectories } from '../scan/imports.js';
 import { buildAbsenceEvidence, buildEvidence } from '../scan/redact.js';
 import {
   elisionDisclosure,
@@ -140,6 +141,20 @@ export interface Lg006Applicable {
    * exists in any one of them.
    */
   handlerPaths: string[];
+  /**
+   * Paths of located handlers whose full raw content carries at least one
+   * LOCAL RUNTIME import — the delegated-opacity guard's input (H-003, the
+   * same class LG-005 guards since H-001), a subset of {@link handlerPaths}
+   * in the same deterministic order. When non-empty, `interpretLg006`
+   * demotes a model-asserted (`inferred`) `fail` to `unknown`: the handler
+   * may delegate the downgrade to a local module that the conjunctive
+   * cancellation-marker `selects` predicate excluded, so the model cannot
+   * have been shown the code that performs the downgrade without naming a
+   * cancellation event. See {@link hasLocalRuntimeImport} for the predicate
+   * and the recall cost. The deterministic blocker and the offline branch
+   * never consult this field.
+   */
+  handlersWithLocalRuntimeImports: string[];
   /**
    * Deterministic: a customer.subscription.deleted / updated-canceled branch
    * exists in AT LEAST ONE located handler FILE. Drives what is offered to the
@@ -345,9 +360,20 @@ export function surfaceLg006Candidates(fileset: Fileset): Lg006Candidates {
     supportingFacts,
   };
 
+  // Delegated-opacity guard input (H-003; the shared predicate lives in
+  // `src/scan/imports.ts`), computed here because this is where the handlers'
+  // full raw content lives — and computed AFTER the request is fully
+  // assembled above, because it feeds interpretation only and must not move
+  // a transmitted byte.
+  const topLevelDirs = topLevelDirectories(fileset);
+  const handlersWithLocalRuntimeImports = handlers
+    .filter((h) => hasLocalRuntimeImport(h.content, topLevelDirs))
+    .map((h) => h.path);
+
   return {
     applicable: true,
     handlerPaths: handlers.map((h) => h.path),
+    handlersWithLocalRuntimeImports,
     hasCancellationBranch,
     hasCancellationSignalAnywhere,
     hasSurfaceableCancellationSignal,
@@ -470,6 +496,51 @@ export function interpretLg006(candidates: Lg006Candidates, judgment?: Inference
         outcome: 'unknown',
         summary: `Model layer returned no usable cited evidence (${contract.reason}); the subscription-cancellation path is left unverified.`,
         evidence: [],
+      }),
+    ];
+  }
+
+  // The delegated-opacity guard (H-003 — the same class LG-005 guards since
+  // H-001) — asymmetric by design, judgment branch only, `fail` only, and
+  // ONLY for fails the model itself asserted (`classification ===
+  // 'inferred'`). A handler carrying a local runtime import may delegate the
+  // downgrade to a module that performs it WITHOUT naming any cancellation
+  // event — exactly the file the conjunctive `selects` predicate excludes,
+  // and with zero matches no elision disclosure transmits either — so a
+  // `fail` judged over that surface cannot be trusted. A `pass` is
+  // unaffected: an opaque surface cannot invent a downgrade.
+  //
+  // The `inferred` conjunct is load-bearing, not decoration. On the live
+  // M-branch a prose-only-signal repository carries the fail-establishing
+  // `fact:lg006.no-code-cancellation-signal`; a model `pass` then classifies
+  // `contradictory` and `runInferenceContract` forces the outcome to `fail`
+  // (engine rule 5's requires_confirmation path). That fail is the
+  // deterministic fact winning, not a model assertion — the guard must not
+  // touch it.
+  //
+  // Unreachable, provably, from: the deterministic no-signal-anywhere
+  // blocker (hoisted above the judgment check and untouched — it remains the
+  // check's offline teeth), the offline/AT-27 return (returns before any
+  // contract exists), and settled repositories (whose request is withheld).
+  //
+  // RECALL COST, disclosed: LG-006's online M-branch inferred-fail is now
+  // reachable only on handlers whose cancellation path is inline (no local
+  // runtime imports) — per the shared predicate's own contract, a heuristic
+  // may under-warn; it must never manufacture a false blocker.
+  const opaque = candidates.handlersWithLocalRuntimeImports;
+  if (contract.finding.outcome === 'fail' && contract.classification === 'inferred' && opaque.length > 0) {
+    return [
+      makeFinding({
+        checkId: 'LG-006',
+        seq: 1,
+        outcome: 'unknown',
+        summary:
+          `The subscription-cancellation downgrade could not be judged from the surfaced code: ${opaque.length} of ` +
+          `${candidates.handlerPaths.length} located handler(s) carry local runtime imports ` +
+          `(${opaque.join(', ')}), so the downgrade path may live in a local module the cancellation-marker ` +
+          'surface did not show the model. Reported unknown rather than failed, because a delegated module that ' +
+          'performs the downgrade without naming a cancellation event is exactly what the surface excludes.',
+        evidence: contract.finding.evidence,
       }),
     ];
   }
