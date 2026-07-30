@@ -5,14 +5,68 @@
 > on close. One packet at a time.
 
 - **Status:** **NONE ACTIVE.**
-- **Last closed:** **EV-001** — *Allocate the evidence method per check; restate the
-  Phase-1 boundary* — **OPENED and CLOSED 2026-07-28.** *(This file previously read
+- **Last closed:** **H-001** — *Repair the two Codex-named defects in shipped detector
+  code: LG-009 unbanded elision (§7.2) + LG-005 delegated opacity (§7.1)* — **OPENED and
+  CLOSED 2026-07-30.** *(This file read "Status: NONE ACTIVE" for the whole of H-001 and
+  never named it — both its open and its close are recorded here, at close, so the gap
+  is visible rather than papered over.)* **TWO commits on base `c7eb27d`** (verified
+  merge-base), **both LOCAL — not pushed**: **C1 `72e42db`** — LG-009
+  `incompleteSurface = delegated.elided > 0`, the total-elided form that **cannot omit a
+  band again** (2 files, +94/−9); **C2 `4dfea24`** — the **LG-005 delegated-opacity
+  guard** (3 files, +363/−2; amended once from `bee97a2` for the reviewer's
+  template-literal fix, HEAD verified own+unpushed first). qa **GREEN 12/12** (at
+  `bee97a2`); reviewer **fix-then-pass → PASS** — the one real hole (template-literal
+  specifiers did not arm the guard) was proven with 3 red probes, closed in the amend,
+  and re-verified 9/9 at `4dfea24` (pre-fix overlay = exactly 3 red). **≤2 commits held;
+  Commit-1 green in isolation (390/30, fresh `npm ci` worktree).** Receipt:
+  **`build-os/receipts/H-001.md`**.
+- **NEW SERIES `H-NNN`** — hardening packets that repair **named open defects in shipped
+  product code**; **no new detector, no doctrine**. Forced by the existing namespace
+  rules, not preference: **`A-S*` is reserved for the detector fork and A-S4's number
+  must not be consumed by a repair** (a pause must never look like a completion);
+  `T-NNN` is the Build OS runtime series; `EV-NNN` ships no product code; `P-0NN` is
+  frozen.
+- **H-001 NUMBERS:** tests **387 → 402 / 30 files**; typecheck **0**; eval **11/11 · 0
+  blocker FPs**; **all 11 offline report hashes byte-identical to the A-S3 baseline**
+  (recomputed independently by qa at `bee97a2` AND the main session at `4dfea24`);
+  `fixtures/` tree `a981446bac76039147d93efedd14a092c2aeadc1` — **SEVENTH consecutive
+  zero-fixture-movement packet** (A-S1c, A-S2, A-S3, T-001, T-002, EV-001, H-001 — the
+  reviewer's "sixth" was a miscount; qa's seventh is right); **assertion budget 0 of 2**
+  (one pre-existing repo-call line re-based; zero `expect` lines changed); diff
+  confinement **exactly 5 files** with blob-SHA identity on
+  `surface.ts`/`modelCheck.ts`/`lg006.ts`/`engine.ts`/schema/questionPin/`scanner.ts`;
+  zero-infer suppression 7/7; safety grep clean.
+- **H-001 PROCESS INCIDENT — the session's THIRD Trap-9 instance, CAUGHT IN-FLIGHT.**
+  The first version of the two dynamic-import regression tests **passed pre-fix,
+  vacuously**: helpers under `app/api/stripe/webhook/` were located as HANDLERS
+  (`isWebhookHandler` matches ANY code file under a webhook-ish `/api/` path) and armed
+  the guard through their own quoted import. Caught by running the negative control
+  BEFORE the fix; helpers moved to `lib/`; three arming tests then red pre-fix, green
+  post-fix; reviewer re-verified via pre-fix overlay. **Standing lesson: any test file
+  placing a repo file under a webhook-ish path has put a HANDLER there, whether it
+  meant to or not.**
+- **H-001 SECOND EYES — NOT OBTAINED on H-001's own diff.** The repaired defects were
+  Codex-sourced (T-002's PR review), but the commits are local and **Codex re-review of
+  PR #1 requires a push plus an explicit `@codex review` comment — pushes alone do not
+  trigger it.**
+- **H-001 RESIDUE HEADLINE:** **LG-006 carries the same delegated-opacity class at a
+  THIRD site** (reviewer) — candidate **H-002**, deliberately NOT fixed at H-001 (diff
+  confinement). Also: the LG-009 widening has a disclosed **transmitted-question
+  consequence** (`lg009.ts:480` — the NOTE ON COMPLETENESS now transmits on
+  unbanded-only elision; direction-correct, recorded not implicit); out-of-class
+  specifier residue (bare npm, `#imports`, tsconfig aliases) bounded + disclosed
+  in-source; the evidence-allocation spec's §7 still records §7.1/§7.2 as open — do NOT
+  edit that spec; the correction convention is the next packet's problem.
+- **Previously closed:** **EV-001** — *Allocate the evidence method per check; restate
+  the Phase-1 boundary* — **OPENED and CLOSED 2026-07-28.** *(This file previously read
   "Status: NONE ACTIVE" for the whole of EV-001 and never named it — both its open and
   its close are recorded here, at close, so the gap is visible rather than silent.)*
   qa **GREEN on DC-1..DC-12, DC-14, DC-15; RED on DC-13, now fixed**; reviewer
   **fix-then-pass (recorded as fixed)** with **all four required fixes applied**.
-  **ONE commit `258cc70`** (2 files, **+497/−2**) on base **`9706d87`** — originally
-  `e3c0425`, **amended once** to fold in the qa and reviewer fixes (HEAD verified to be
+  **ONE commit — final `325a715`** (2 files, **+497/−2**) on base **`9706d87`** — originally
+  `e3c0425`, **amended TWICE** (`e3c0425` → `258cc70` → `325a715`; **CORRECTED AT H-001** —
+  this file previously said `258cc70`, "amended once": the archivist wrote between the
+  amends) to fold in the qa and reviewer fixes (HEAD verified to be
   our own unpushed commit first, per the standing `--amend` constraint). **ZERO PRODUCT
   CODE.** **≤2 commits held.** Receipt: **`build-os/receipts/EV-001.md`**.
 - **NEW SERIES `EV-NNN`** — evidence-method allocation and phase-boundary doctrine;
@@ -125,9 +179,20 @@
 
 ---
 
-## Next — **LG-005 delegated-helper hardening (staged candidate)**; **A-S4 is PAUSED**
+## Next — candidate slate (user decision); **A-S4 is PAUSED**
 
-### THE NEXT PACKET SHOULD BE CODE — staged candidate: **LG-005 delegated-helper hardening**
+### ~~THE NEXT PACKET SHOULD BE CODE — staged candidate: LG-005 delegated-helper hardening~~ **CONSUMED BY H-001 (2026-07-30)**
+
+**H-001 repaired BOTH named defects** — LG-005 `:203` guarded at `4dfea24`; the
+companion LG-009 `:423` widened at `72e42db`. The shaping notes below stand as the
+historical record of WHY.
+
+### Next-candidate slate for the user — none shaped, none authorized
+
+- **(a) The FIELD TEST** — task-tracked, **blocked on user forks**.
+- **(b) H-002 — LG-006 delegated-opacity** (the same class at a third site,
+  reviewer-found at H-001) — **if the field test confirms the class matters**.
+- **(c) A-S4 UNPAUSE** — the detector fork resumes with all shaping inputs below intact.
 
 **Not shaped. Not authorized. Do not start.** The orchestrator shapes it; the user
 gives the go.
@@ -174,6 +239,9 @@ gives the go. **T-001 did not alter a single one of A-S4's shaping inputs**, and
 DISCHARGED the two process inputs (8 and 9).** The nine original inputs are carried
 forward intact; **inputs 10 and 11 are independently-sourced, concrete defects in
 LG-005 and LG-009 and they bear directly on WHICH DETECTOR IS SAFEST TO BUILD NEXT.**
+**(H-001, 2026-07-30): INPUTS 10 AND 11 ARE NOW DISCHARGED — both defects repaired
+(`4dfea24`, `72e42db`); their design lessons (denylist-of-defeaters, class-6 collection
+boundaries) still bind.**
 
 **Remaining detectors: LG-007, LG-011, LG-012, LG-013.**
 
@@ -263,6 +331,10 @@ LG-005 and LG-009 and they bear directly on WHICH DETECTOR IS SAFEST TO BUILD NE
     **direct verification of the source** settled it. **Still unfixed at EV-001: §7.1
     LOCATED and owner-assigned it, and repaired nothing.** **This is now the STAGED
     CANDIDATE for the next packet — see the section above.**
+    **DISCHARGED BY H-001 (2026-07-30, `4dfea24`): the delegated-opacity guard demotes an
+    online model `fail` to `unknown` when the handler carries local runtime imports,
+    counts+paths disclosed; transmitted bytes untouched. Kept as history; the lesson
+    still binds.**
 11. **(NEW AT T-002, CODEX) LG-009's `incompleteSurface` IGNORES THE UNBANDED REMAINDER —
     `src/checks/lg009.ts:424`, a REAL DEFECT ON CLOSED A-S3 WORK.** When five preferred
     files fill the cap and an **additional table-name-only candidate holds the real
@@ -282,6 +354,9 @@ LG-005 and LG-009 and they bear directly on WHICH DETECTOR IS SAFEST TO BUILD NE
     what Codex described — **not wider.** *(Line cite is `:423`, not `:424`.)*
     **The fix packet must still establish this from the code, not from any report.**
     **Still unfixed at EV-001: §7.2 located it only.**
+    **DISCHARGED BY H-001 (2026-07-30, `72e42db`): `incompleteSurface =
+    delegated.elided > 0` — the total-elided form cannot omit a band again; established
+    from the code, as required. Kept as history.**
 
 ### Carry-forward constraints (unchanged, binding)
 
@@ -369,15 +444,19 @@ receipt table, which supersedes A-S2's.
   authorized** ("Both: create main AND PR now"). **No merge is proposed or authorized.**
 
 ---
-_Cleared by the archivist on close of **EV-001** (2026-07-28); prior clears on close of
-**T-002** (2026-07-27) and **T-001** (2026-07-26). **EV-001's open AND close are both
+_Cleared by the archivist on close of **H-001** (2026-07-30); prior clears on close of
+**EV-001** (2026-07-28), **T-002** (2026-07-27) and **T-001** (2026-07-26). **H-001's
+open AND close are both recorded above** — this file read "Status: NONE ACTIVE" for the
+whole of that packet too; the gap is recorded rather than papered over. **EV-001's open AND close are both
 recorded above** — this file read "Status: NONE ACTIVE" for the whole of that packet and
 never named it, and the gap is recorded rather than papered over. **A-S4 is PAUSED BY
 USER DIRECTIVE (2026-07-28) — NOT cancelled and NOT superseded — with ALL ELEVEN binding
-shaping inputs PRESERVED, NOT CLEARED. The thesis is not abandoned; the build sequence is
-adjusted.** **The next packet should be CODE**: the staged candidate is **LG-005
-delegated-helper hardening at `src/checks/lg005.ts:203`** — unshaped and unauthorized,
-awaiting orchestrator shaping and the user's explicit go. **Detector coverage remains
+shaping inputs PRESERVED, NOT CLEARED (inputs 10 and 11 now DISCHARGED by H-001; their
+lessons still bind). The thesis is not abandoned; the build sequence is
+adjusted.** **The staged LG-005 candidate was CONSUMED BY H-001.** The next-candidate slate for the
+user is (a) the field test (blocked on user forks), (b) H-002 — LG-006 delegated-opacity
+— if the field test confirms the class matters, (c) A-S4 unpause — none shaped, none
+authorized. **Detector coverage remains
 QUALIFIED — 11 of 15 implemented, 8 offline-decision-moving. The TEST-DATA POLICY remains
 in force on every surface. The self-updating bootstrap is self-triggering and the pin
 fails open — run `git status` on managed paths before any `build-os` commit.**_
