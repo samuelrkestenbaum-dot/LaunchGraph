@@ -4,6 +4,7 @@ import { getCheck } from '../../src/checks/registry.js';
 import { interpretLg009, lg009ModelCheck, sanitizeIdentifiers, surfaceLg009Candidates } from '../../src/checks/lg009.js';
 import { FakeModelClient } from '../../src/model/fakeClient.js';
 import type { InferenceRequest, InferenceResult } from '../../src/model/client.js';
+import { surfaceDelegatedCandidates } from '../../src/scan/surface.js';
 import { cleanupRepos, makeRepo } from '../support/tempRepo.js';
 
 afterAll(cleanupRepos);
@@ -258,6 +259,81 @@ describe('LG-009 — DC-11: an incomplete surface suppresses a model FAIL', () =
     if (!c.applicable) return;
     expect(c.incompleteSurface).toBe(false);
     expect(interpretLg009(c, await judge(c.request, 'fail', 0.9))[0]?.outcome).toBe('fail');
+  });
+});
+
+describe('LG-009 — DC-11 covers the UNBANDED remainder (H-001 Commit 1 regression)', () => {
+  /**
+   * Five scoping-MECHANISM files (band 0) fill the cap of 5, and a sixth
+   * candidate matches ONLY the tenant table NAME — no recognised tenant
+   * column, no mechanism — so it can land only in the trailing unbanded slot.
+   * `surface.ts` sizes `elidedByBand` as `bands.length + 1`, and lg009 passes
+   * EXACTLY TWO `prefers` predicates, so the unbanded slot is index 2. A
+   * table-name-only candidate is exactly where a relation-predicate scoping
+   * query can live, so a model `fail` over this surface must not stand.
+   */
+  const TABLE_NAME_ONLY_QUERY = 'export const rows = db.query("SELECT count(*) FROM organizations");\n';
+  function unbandedElisionRepo(): Record<string, string> {
+    const files: Record<string, string> = { 'migrations/001.sql': MIGRATION_TENANT };
+    for (const n of ['a', 'b', 'c', 'd', 'e']) {
+      files[`lib/${n}.ts`] = 'export const db = base.$extends(withOrg(ctx.orgId));\n';
+    }
+    files['lib/report.ts'] = TABLE_NAME_ONLY_QUERY;
+    return files;
+  }
+
+  it('SHAPE PROOF: the elided file sits in the trailing unbanded band (elidedByBand[2] >= 1)', () => {
+    const { fileset } = makeRepo(unbandedElisionRepo());
+    // Mirror of lg009's surfacing call over the SAME fileset. The predicates
+    // agree with lg009's on every file this repo contains: band 0 is the
+    // scoping mechanism, band 1 the tenant-column reference, and the
+    // table-name-only file matches neither.
+    const surface = surfaceDelegatedCandidates(fileset, {
+      handlers: [],
+      selects: (content) => /\$extends|\bwithOrg\b/.test(content) || /\borganizations\b/i.test(content),
+      anchor: /\$extends|\bwithOrg\b|\borganizations\b/i,
+      prefers: [(c) => /\$extends|\bwithOrg\b/.test(c), (c) => /\borganization_id\b/.test(c)],
+      cap: 5,
+      windowBefore: 10,
+      windowAfter: 30,
+      note: 'shape proof',
+      signalLabel: 'tenant-scoping signal',
+    });
+    expect(surface.elidedByBand).toHaveLength(3);
+    expect(surface.elidedByBand[0]).toBe(0);
+    expect(surface.elidedByBand[1]).toBe(0);
+    expect(surface.elidedByBand[2]).toBeGreaterThanOrEqual(1);
+    // ...and the REAL surface agrees with the mirror: both named bands are
+    // fully shown, and the table-name-only file is the one the cap dropped.
+    const c = surfaceLg009Candidates(fileset);
+    expect(c.applicable).toBe(true);
+    if (!c.applicable) return;
+    const paths = c.request.excerpts.map((e) => e.path);
+    expect(paths).toEqual(['lib/a.ts', 'lib/b.ts', 'lib/c.ts', 'lib/d.ts', 'lib/e.ts']);
+    expect(paths).not.toContain('lib/report.ts');
+  });
+
+  it('a fake model FAIL over that surface yields unknown, not the inferred blocker', async () => {
+    const { fileset } = makeRepo(unbandedElisionRepo());
+    const c = surfaceLg009Candidates(fileset);
+    expect(c.applicable).toBe(true);
+    if (!c.applicable) return;
+    // The widened DC-11 input: ANY elision marks the surface incomplete. On
+    // unpatched code this is false (the [0] + [1] sum omits index 2).
+    expect(c.incompleteSurface).toBe(true);
+    const [finding] = interpretLg009(c, await judge(c.request, 'fail', 0.9));
+    expect(finding?.outcome).toBe('unknown');
+    expect(finding?.outcome).not.toBe('fail');
+    expect(finding?.summary).toMatch(/incomplete/i);
+  });
+
+  it('a fake model PASS over the same surface still stands (the asymmetry is preserved)', async () => {
+    const { fileset } = makeRepo(unbandedElisionRepo());
+    const c = surfaceLg009Candidates(fileset);
+    if (!c.applicable) return;
+    const [finding] = interpretLg009(c, await judge(c.request, 'pass', 0.85));
+    expect(finding?.outcome).toBe('pass');
+    expect(finding?.classification).toBe('inferred');
   });
 });
 

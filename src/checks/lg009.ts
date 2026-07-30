@@ -160,9 +160,11 @@ export interface Lg009Applicable {
   /** True when RLS was found on none of the tenant tables. */
   noRlsFound: boolean;
   /**
-   * True when the cap elided files from the two SPECIFIC bands — the scoping
-   * mechanism or a tenant-column reference. When set, a model `fail` cannot be
-   * trusted: the evidence that would have exonerated the repository is exactly
+   * True when the cap elided ANY selected file — a scoping mechanism, a
+   * tenant-column reference, or the trailing unbanded remainder (a
+   * table-name-only match, which can hold a relation-predicate scoping query
+   * just as the named bands can). When set, a model `fail` cannot be trusted:
+   * the evidence that would have exonerated the repository may be exactly
    * what went missing.
    */
   incompleteSurface: boolean;
@@ -420,8 +422,14 @@ export function surfaceLg009Candidates(fileset: Fileset): Lg009Candidates {
     signalLabel: 'tenant-scoping signal',
   });
 
-  const specificElided = (delegated.elidedByBand[0] ?? 0) + (delegated.elidedByBand[1] ?? 0);
-  const incompleteSurface = specificElided > 0;
+  // Incompleteness keys on the TOTAL elision count, never on a sum of named
+  // bands: `elidedByBand` always sums to `elided` (see surface.ts), so this
+  // form cannot omit a band again. The previous `[0] + [1]` sum missed the
+  // trailing UNBANDED slot — a table-name-only candidate, which is exactly
+  // where a relation-predicate scoping query can live. Widening this input is
+  // monotone-safe: it can only move a model `fail` to `unknown`, never the
+  // other way (H-001).
+  const incompleteSurface = delegated.elided > 0;
   const noRlsFound = !/ENABLE\s+ROW\s+LEVEL\s+SECURITY/i.test(rlsScanText);
 
   // NEITHER fact carries establishesVerdict. Both are true statements about the
@@ -526,10 +534,11 @@ export function interpretLg009(candidates: Lg009Candidates, judgment?: Inference
     ];
   }
 
-  // DC-11, asymmetric by design. When the cap elided files from the scoping or
-  // tenant-column bands, the surface may be missing precisely the evidence that
-  // would have exonerated the repository, so a `fail` cannot be trusted. A
-  // `pass` is unaffected: an incomplete surface cannot invent scoping.
+  // DC-11, asymmetric by design. When the cap elided ANY selected file —
+  // including the trailing unbanded remainder — the surface may be missing
+  // precisely the evidence that would have exonerated the repository, so a
+  // `fail` cannot be trusted. A `pass` is unaffected: an incomplete surface
+  // cannot invent scoping.
   if (candidates.incompleteSurface && contract.finding.outcome === 'fail') {
     return [
       makeFinding({
