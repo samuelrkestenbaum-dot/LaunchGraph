@@ -5,7 +5,53 @@
 > on close. One packet at a time.
 
 - **Status:** **NONE ACTIVE.**
-- **Last closed:** **H-001** — *Repair the two Codex-named defects in shipped detector
+- **Last closed:** **H-003** — *Extract the local-runtime-import predicate into a shared
+  seam and close the LG-006 delegated-opacity defect* — **OPENED and CLOSED 2026-07-30.**
+  *(This file read "Status: NONE ACTIVE" for the whole of H-003 AND for the H-002
+  tiny-edit addendum, and named neither — open and close are recorded here, at close, so
+  the gap is visible rather than papered over — the same gap as H-001 and EV-001 before
+  it.)* **TWO commits on base `4934927`** (verified merge-base; ALSO the remote branch
+  tip — **H-003's commits are LOCAL, not pushed**): **C1 `5bfacc8`** — the
+  local-runtime-import predicate extracted into **`src/scan/imports.ts`** (the THIRD
+  shared seam, per the second-consumer precedent; four regexes verbatim/module-private;
+  LG-005 migrated **byte-behavior-identically** — `lg005.test.ts` blob-identical, all 4
+  regexes byte-identical, `InferenceRequest` sha256-equal base↔tip). **C2 `1135a6c`** —
+  the **LG-006 delegated-opacity guard, purely additive (+71/−0)**: demotion at
+  `lg006.ts:530-531` iff ALL FOUR conjuncts (finding ∧ `fail` ∧
+  **`classification === 'inferred'`** ∧ armed handlers > 0) — the `inferred` conjunct
+  protects the live fail-establishing fact path (`inference.ts:140` forces `fail` on
+  `contradictory`; a heuristic must not override a deterministic fact); the D blocker
+  (`:442-467`) and the offline AT-27 return are provably unreachable by the guard. qa
+  **GREEN 12/12**; reviewer **PASS — the first clean pass of the hardening series
+  (single-model review, recorded as such)**, with **three record items** (fact-agreeing-
+  fail demotion corner P6; the combined-shape sentence; surfaced-delegate over-demotion)
+  in the receipt AND residue. **≤2 commits held; Commit-1 green in isolation (423/31,
+  fresh `npm ci` worktree).** Receipt: **`build-os/receipts/H-003.md`**.
+- **H-003 NUMBERS:** tests **404 → 430 / 31 files**; typecheck **0**; eval **11/11 · 0
+  blocker FPs**; **all 11 offline hashes AND byte sizes = the A-S3 baseline**
+  (`broken-lg-006` `a2e9caf5144d4559`/8678, decision unchanged); diff **exactly 6
+  files**, blob identity on `surface.ts`/`webhook.ts`/`collect.ts`/`scanner.ts`/
+  `src/model/*`/`lg009.ts`/`engine.ts`/schema/questionPin/`lg005.test.ts`; `fixtures/`
+  tree `a981446bac76039147d93efedd14a092c2aeadc1` — **EIGHTH consecutive
+  zero-fixture-movement packet**; **assertion budget 0 of 2** (5 repo-call line
+  re-bases itemized, zero `expect` changes); safety grep clean (sole hit: pre-existing
+  `STRIPE_WEBHOOK_SECRET` env-ref idiom in a test-fixture string); negative control
+  **red on base** (`expected 'fail' to be 'unknown'` at `lg006.test.ts:484`); invariance
+  pins (a)–(d) green on BOTH base and tip.
+- **THE H-002 NUMBER WAS CONSUMED BY A TINY-EDIT ADDENDUM, NOT A PACKET:** commit
+  **`6d7cc80`** repaired a **Codex P2 re-review finding** on the H-001 guard
+  (side-effect-only imports did not arm it; `SIDE_EFFECT_IMPORT_RE`, quoted specifiers
+  only — static import declarations cannot take template literals; suite 402→404;
+  negative control red pre-fix; all 11 hashes unmoved; Codex thread replied + resolved).
+  **Tiny-edit lane — no receipt of its own; recorded in `build-os/receipts/H-003.md`.**
+- **PUSH STATE (supersedes H-001's "awaiting push go"):** the branch is **PUSHED through
+  `4934927`** (H-001's two commits, its close `3143100`, `6d7cc80`, and the CI workflow)
+  under the standing HANDOFF §8 authorization + the user's session directives.
+  **`.github/workflows/test.yml` — the repo's FIRST CI ever** (test+typecheck+eval on
+  every push/PR). **PR #1: all Codex threads resolved except the deliberately-open
+  upstream P2** (`project-bootstrap.sh:209` — owed upstream, never write to canonical);
+  Codex: **SIX real defects across three reviews vs zero from the green suite**.
+- **Previously closed:** **H-001** — *Repair the two Codex-named defects in shipped detector
   code: LG-009 unbanded elision (§7.2) + LG-005 delegated opacity (§7.1)* — **OPENED and
   CLOSED 2026-07-30.** *(This file read "Status: NONE ACTIVE" for the whole of H-001 and
   never named it — both its open and its close are recorded here, at close, so the gap
@@ -189,10 +235,18 @@ historical record of WHY.
 
 ### Next-candidate slate for the user — none shaped, none authorized
 
-- **(a) The FIELD TEST** — task-tracked, **blocked on user forks**.
-- **(b) H-002 — LG-006 delegated-opacity** (the same class at a third site,
-  reviewer-found at H-001) — **if the field test confirms the class matters**.
-- **(c) A-S4 UNPAUSE** — the detector fork resumes with all shaping inputs below intact.
+- **(a) The FIELD TEST on user forks** — the **kill-criterion experiment**; harness
+  built + e2e-verified at `scratchpad/field-test/`; **corpus of 11 forks awaiting USER
+  clicks**.
+- **(b) The FT-1 FIXTURE-CONTAMINATION SCAN-BOUNDARY packet** — the SugarBee self-scan
+  returned `not_ready` with 6 confirmed blockers, ALL evidence from `fixtures/` and
+  `tests/`; **where the test-directory scan boundary belongs is a design decision the
+  spec never made** (residue doctrine: a design decision, not a patch).
+- **(c) A-S4 UNPAUSE (user call)** — the detector fork resumes with all shaping inputs
+  below intact.
+
+*(The former "(b) H-002 — LG-006 delegated-opacity" is CONSUMED: the class was fixed at
+H-003 `1135a6c`; the H-002 number itself went to the `6d7cc80` addendum.)*
 
 **Not shaped. Not authorized. Do not start.** The orchestrator shapes it; the user
 gives the go.
@@ -444,8 +498,11 @@ receipt table, which supersedes A-S2's.
   authorized** ("Both: create main AND PR now"). **No merge is proposed or authorized.**
 
 ---
-_Cleared by the archivist on close of **H-001** (2026-07-30); prior clears on close of
-**EV-001** (2026-07-28), **T-002** (2026-07-27) and **T-001** (2026-07-26). **H-001's
+_Cleared by the archivist on close of **H-003** (2026-07-30); prior clears on close of
+**H-001** (2026-07-30), **EV-001** (2026-07-28), **T-002** (2026-07-27) and **T-001**
+(2026-07-26). **H-003's open AND close are both recorded above** — this file read
+"Status: NONE ACTIVE" for the whole of H-003 and the H-002 addendum and named neither;
+the gap is recorded rather than papered over. **H-001's
 open AND close are both recorded above** — this file read "Status: NONE ACTIVE" for the
 whole of that packet too; the gap is recorded rather than papered over. **EV-001's open AND close are both
 recorded above** — this file read "Status: NONE ACTIVE" for the whole of that packet and
@@ -453,10 +510,10 @@ never named it, and the gap is recorded rather than papered over. **A-S4 is PAUS
 USER DIRECTIVE (2026-07-28) — NOT cancelled and NOT superseded — with ALL ELEVEN binding
 shaping inputs PRESERVED, NOT CLEARED (inputs 10 and 11 now DISCHARGED by H-001; their
 lessons still bind). The thesis is not abandoned; the build sequence is
-adjusted.** **The staged LG-005 candidate was CONSUMED BY H-001.** The next-candidate slate for the
-user is (a) the field test (blocked on user forks), (b) H-002 — LG-006 delegated-opacity
-— if the field test confirms the class matters, (c) A-S4 unpause — none shaped, none
-authorized. **Detector coverage remains
+adjusted.** **The staged LG-005 candidate was CONSUMED BY H-001; the LG-006 candidate by H-003.**
+The next-candidate slate for the user is (a) the field test on user forks (the
+kill-criterion experiment), (b) the FT-1 fixture-contamination scan-boundary packet,
+(c) A-S4 unpause (user call) — none shaped, none authorized. **Detector coverage remains
 QUALIFIED — 11 of 15 implemented, 8 offline-decision-moving. The TEST-DATA POLICY remains
 in force on every surface. The self-updating bootstrap is self-triggering and the pin
 fails open — run `git status` on managed paths before any `build-os` commit.**_
