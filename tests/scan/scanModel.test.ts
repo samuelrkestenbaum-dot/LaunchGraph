@@ -108,6 +108,37 @@ function delegatingCancellationRepo(): string {
 }
 
 /**
+ * A verified handler whose side effects are all INLINE — its only import is
+ * the bare npm `stripe` specifier, so it carries ZERO local runtime imports.
+ * This is the shape on which H-001's delegated-opacity guard does NOT demote:
+ * the surfaced handler IS the side-effect path the model judged.
+ */
+const HANDLER_INLINE_SIDE_EFFECTS = `import Stripe from 'stripe';
+export async function POST(req: Request) {
+  const sig = req.headers.get('stripe-signature')!;
+  const event = stripe.webhooks.constructEvent(await req.text(), sig, process.env.STRIPE_WEBHOOK_SECRET!);
+  switch (event.type) {
+    case 'customer.subscription.deleted':
+      await db.orgs.update({ where: { id: event.data.object.customer }, data: { plan: 'free' } });
+      break;
+    case 'checkout.session.completed':
+      await db.entitlements.create({ data: { customer: event.data.object.customer } });
+      break;
+  }
+  return new Response('ok');
+}
+`;
+
+/** An otherwise-clean Next app whose webhook does all its work inline. */
+function inlineCancellationRepo(): string {
+  return makeRepo({
+    'package.json': NEXT_PKG,
+    'app/api/stripe/webhook/route.ts': HANDLER_INLINE_SIDE_EFFECTS,
+    '.env.production': PROD_ENV,
+  }).root;
+}
+
+/**
  * A repo whose ONLY cancellation mention is prose in a non-code file. No code
  * file handles cancellation, so `fact:lg006.no-code-cancellation-signal` is
  * live and true — but the mention is enough to keep the deterministic blocker
@@ -487,7 +518,12 @@ describe('A-S2 — LG-005 wiring, --checks suppression and model-call discipline
   });
 
   it('flows an LG-005 inferred blocker FAIL into the decision (first pure-model blocker)', async () => {
-    const report = await scanWithModel(delegatingCancellationRepo(), spy('fail', 0.85), { now: FIXED });
+    // H-001 repair: re-based from delegatingCancellationRepo onto an
+    // INLINE-side-effect repo. The delegating handler carries a local runtime
+    // import, so the delegated-opacity guard now demotes its model fail to
+    // unknown; the inferred blocker legitimately flows only where the
+    // side-effect path is inline. Assertions are unchanged.
+    const report = await scanWithModel(inlineCancellationRepo(), spy('fail', 0.85), { now: FIXED });
     const finding = lg005(report);
     expect(finding?.outcome).toBe('fail');
     expect(finding?.classification).toBe('inferred');

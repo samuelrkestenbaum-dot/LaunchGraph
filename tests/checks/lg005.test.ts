@@ -330,3 +330,191 @@ describe('TRAP 9 — the cap must not preferentially discard the answering file'
     expect([...generic].sort()).toEqual(generic);
   });
 });
+
+/** A handler that delegates through a RELATIVE local runtime import. */
+const HANDLER_DELEGATING_RECONCILER = `import Stripe from 'stripe';
+import { applySubscriptionState } from '../../../../lib/subscription-state';
+export async function POST(req: Request) {
+  const sig = req.headers.get('stripe-signature')!;
+  const event = stripe.webhooks.constructEvent(await req.text(), sig, process.env.STRIPE_WEBHOOK_SECRET!);
+  await applySubscriptionState(event);
+  return new Response('ok');
+}
+`;
+
+/**
+ * The helper the handler delegates to: idempotent BY CONSTRUCTION — a plain
+ * state-reconciliation UPDATE carrying no event-id / upsert / dedup marker at
+ * all — so the marker-based `selects` predicate excludes it from the surface.
+ * A CORRECT repository, in the module docstring's own canonical shape.
+ */
+const RECONCILING_HELPER = `import { db } from './db';
+export async function applySubscriptionState(event: any): Promise<void> {
+  await db.query('UPDATE subscriptions SET status = $1 WHERE stripe_sub_id = $2', [
+    event.data.object.status,
+    event.data.object.id,
+  ]);
+}
+`;
+
+describe('H-001 — the delegated-opacity guard (asymmetric; judgment branch only; fail only)', () => {
+  const reconcilingRepo = (): Record<string, string> => ({
+    'app/api/stripe/webhook/route.ts': HANDLER_DELEGATING_RECONCILER,
+    'lib/subscription-state.ts': RECONCILING_HELPER,
+  });
+
+  it('repro SHAPE PROOF: the markerless helper is ABSENT from the surface, and nothing discloses it', () => {
+    const { fileset } = makeRepo(reconcilingRepo());
+    const candidates = surfaceLg005Candidates(fileset) as Lg005Applicable;
+    const paths = candidates.request.excerpts.map((e) => e.path);
+    // `selects` excluded the helper (it carries no positive marker)...
+    expect(paths).not.toContain('lib/subscription-state.ts');
+    expect(paths).toEqual(['app/api/stripe/webhook/route.ts']);
+    // ...and because nothing matched, elided === 0, so no completeness
+    // disclosure transmits either: the model is never told anything is missing.
+    expect(candidates.request.question).not.toMatch(/NOTE ON COMPLETENESS/);
+  });
+
+  it('repro: a fake model FAIL over that opaque surface is demoted to unknown, reason disclosed', async () => {
+    const { fileset } = makeRepo(reconcilingRepo());
+    const candidates = surfaceLg005Candidates(fileset) as Lg005Applicable;
+    const [finding] = interpretLg005(candidates, await judge(candidates, 'fail', 0.85));
+    expect(finding?.outcome).toBe('unknown');
+    expect(finding?.outcome).not.toBe('fail');
+    expect(finding?.summary).toMatch(/local runtime import/i);
+    expect(finding?.summary).toContain('app/api/stripe/webhook/route.ts');
+    expect(finding?.summary).toContain('1 of 1');
+  });
+
+  it('positive control: an inline-side-effect handler (ZERO local runtime imports) still fails', async () => {
+    // The guard must not kill the detector: with no local runtime import the
+    // side-effect path is inline (bare npm specifiers are out of class), so
+    // the surfaced handler IS the code the model judged.
+    const { fileset } = makeRepo({ 'app/api/stripe/webhook/route.ts': HANDLER_NO_GUARD });
+    const candidates = surfaceLg005Candidates(fileset) as Lg005Applicable;
+    const [finding] = interpretLg005(candidates, await judge(candidates, 'fail', 0.85));
+    expect(finding?.outcome).toBe('fail');
+    expect(finding?.classification).toBe('inferred');
+    expect(finding?.severity).toBe('blocker');
+  });
+
+  it('a fake model PASS is untouched by the guard (asymmetric by design)', async () => {
+    const { fileset } = makeRepo(reconcilingRepo());
+    const candidates = surfaceLg005Candidates(fileset) as Lg005Applicable;
+    const [finding] = interpretLg005(candidates, await judge(candidates, 'pass', 0.8));
+    expect(finding?.outcome).toBe('pass');
+    expect(finding?.classification).toBe('inferred');
+  });
+
+  it('realistic CRUD-noise shape: upsert noise fills the surface, the helper stays unsurfaced, the guard still demotes', async () => {
+    // The class, not just the instance: five unrelated routes matching
+    // `upsert` populate the delegated surface, so the request LOOKS well
+    // evidenced while the one file that answers the question is still the
+    // markerless helper `selects` excluded.
+    const files = reconcilingRepo();
+    for (const n of ['organizations', 'profile', 'settings', 'users', 'waitlist']) {
+      files[`app/api/${n}/route.ts`] =
+        `export async function POST(r: Request) { await prisma.${n}.upsert({ where: { id }, update: {}, create: {} }); }\n`;
+    }
+    const { fileset } = makeRepo(files);
+    const candidates = surfaceLg005Candidates(fileset) as Lg005Applicable;
+    const paths = candidates.request.excerpts.map((e) => e.path);
+    expect(paths.filter((p) => p.startsWith('app/api/') && !p.includes('webhook'))).toHaveLength(5);
+    expect(paths).not.toContain('lib/subscription-state.ts');
+    const [finding] = interpretLg005(candidates, await judge(candidates, 'fail', 0.85));
+    expect(finding?.outcome).toBe('unknown');
+    expect(finding?.summary).toMatch(/local runtime import/i);
+  });
+
+  it('a baseUrl-style specifier whose first segment is a top-level dir in the fileset also arms the guard', async () => {
+    const { fileset } = makeRepo({
+      'app/api/stripe/webhook/route.ts': HANDLER_DELEGATING_RECONCILER.replace(
+        "'../../../../lib/subscription-state'",
+        "'lib/subscription-state'",
+      ),
+      'lib/subscription-state.ts': RECONCILING_HELPER,
+    });
+    const candidates = surfaceLg005Candidates(fileset) as Lg005Applicable;
+    const [finding] = interpretLg005(candidates, await judge(candidates, 'fail', 0.85));
+    expect(finding?.outcome).toBe('unknown');
+  });
+
+  it('a template-literal dynamic import with a LOCAL specifier arms the guard', async () => {
+    // Backtick specifiers are the same delegation shape as quoted ones.
+    // The helper lives OUTSIDE the webhook path — placed under app/api/…/webhook/
+    // it would itself be located as a handler (all-handlers semantics) and its
+    // own quoted import would arm the guard, making this test vacuous for the
+    // template-literal shape it exists to prove.
+    const { fileset } = makeRepo({
+      'app/api/stripe/webhook/route.ts': `const mod = await import(\`../../../../lib/reconciler\`);\n${HANDLER_NO_GUARD}`,
+      'lib/reconciler.ts': RECONCILING_HELPER,
+    });
+    const candidates = surfaceLg005Candidates(fileset) as Lg005Applicable;
+    const [finding] = interpretLg005(candidates, await judge(candidates, 'fail', 0.85));
+    expect(finding?.outcome).toBe('unknown');
+  });
+
+  it('an INTERPOLATED template-literal dynamic import with a local static prefix arms the guard', async () => {
+    // Per-event-type dispatch is exactly a delegation shape: the model cannot
+    // see any of the modules the interpolation resolves to. Classified by the
+    // static prefix before the first interpolation hole.
+    // Helper outside the webhook path for the same non-vacuity reason as above.
+    const { fileset } = makeRepo({
+      'app/api/stripe/webhook/route.ts': `const h = await import(\`../../../../lib/handlers/\${event.type}\`);\n${HANDLER_NO_GUARD}`,
+      'lib/handlers/noop.ts': RECONCILING_HELPER,
+    });
+    const candidates = surfaceLg005Candidates(fileset) as Lg005Applicable;
+    const [finding] = interpretLg005(candidates, await judge(candidates, 'fail', 0.85));
+    expect(finding?.outcome).toBe('unknown');
+  });
+
+  it('a template-literal require() with a local specifier arms the guard', async () => {
+    const { fileset } = makeRepo({
+      'app/api/stripe/webhook/route.ts': `const state = require(\`../../../../lib/subscription-state\`);\n${HANDLER_NO_GUARD}`,
+      'lib/subscription-state.ts': RECONCILING_HELPER,
+    });
+    const candidates = surfaceLg005Candidates(fileset) as Lg005Applicable;
+    const [finding] = interpretLg005(candidates, await judge(candidates, 'fail', 0.85));
+    expect(finding?.outcome).toBe('unknown');
+  });
+
+  it('a template-literal dynamic import of a BARE npm specifier does NOT arm the guard', async () => {
+    // Same out-of-class rule as quoted bare specifiers: node_modules is
+    // outside the evidence universe. Interpolated or not, an `stripe`-prefixed
+    // specifier is not local delegation.
+    const { fileset } = makeRepo({
+      'app/api/stripe/webhook/route.ts': `const sdk = await import(\`stripe\`);\n${HANDLER_NO_GUARD}`,
+    });
+    const candidates = surfaceLg005Candidates(fileset) as Lg005Applicable;
+    const [finding] = interpretLg005(candidates, await judge(candidates, 'fail', 0.85));
+    expect(finding?.outcome).toBe('fail');
+    expect(finding?.classification).toBe('inferred');
+  });
+
+  it('an `import type` statement does NOT arm the guard — fail stays alive where it is sound', async () => {
+    // A type-only import carries no runtime guard and no runtime delegation,
+    // so it must not demote: the handler's side effects are still inline. The
+    // specifier is local ('./types') — it is the `type` keyword that excludes.
+    const { fileset } = makeRepo({
+      'app/api/stripe/webhook/route.ts': `import type { WebhookContext } from './types';\n${HANDLER_NO_GUARD}`,
+    });
+    const candidates = surfaceLg005Candidates(fileset) as Lg005Applicable;
+    const [finding] = interpretLg005(candidates, await judge(candidates, 'fail', 0.85));
+    expect(finding?.outcome).toBe('fail');
+    expect(finding?.classification).toBe('inferred');
+  });
+
+  it('the guard changes NO transmitted byte: question and excerpts are identical to the pre-guard surface', () => {
+    const { fileset } = makeRepo(reconcilingRepo());
+    const candidates = surfaceLg005Candidates(fileset) as Lg005Applicable;
+    // The guard is carried on the CANDIDATES and consumed at interpretation;
+    // the InferenceRequest fields are exactly the pre-existing ones.
+    expect(Object.keys(candidates.request).sort()).toEqual([
+      'checkId',
+      'excerpts',
+      'question',
+      'responseSchema',
+      'supportingFacts',
+    ]);
+  });
+});

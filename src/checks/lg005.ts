@@ -94,6 +94,86 @@ const GENERIC_PERSISTENCE_RE = /\bupsert\b|onConflict|ON\s+CONFLICT|DO\s+NOTHING
  */
 const IDEMPOTENCY_SIGNAL_RE = new RegExp(`${WEBHOOK_DEDUP_RE.source}|${GENERIC_PERSISTENCE_RE.source}`, 'i');
 
+/**
+ * Import/require/export-from statements whose specifier is captured for the
+ * delegated-opacity guard. `[^'"]*?` keeps the clause from bridging across
+ * string literals, so a `from` inside unrelated code cannot pair with a later
+ * string. Group 2 captures the `type` keyword so type-only statements can be
+ * excluded.
+ */
+const IMPORT_EXPORT_FROM_RE = /\b(import|export)\s+(type\s+)?[^'"]*?\bfrom\s*['"]([^'"]+)['"]/g;
+/**
+ * `require('…')` calls. Backtick specifiers are the same delegation shape as
+ * quoted ones; an INTERPOLATED template literal is classified by the static
+ * prefix before the first `${` hole (captured up to `` ` `` or `$`), because
+ * per-event dispatch such as ``import(`./handlers/${event.type}`)`` delegates
+ * to modules the model can never be shown. Over-fire from a prefix
+ * classification is safe by the guard's own asymmetry: it can only demote
+ * `fail` to `unknown`.
+ */
+const REQUIRE_RE = /\brequire\s*\(\s*(?:['"]([^'"]+)['"]|`([^`$]*)[^`]*`)\s*\)/g;
+/** Dynamic `import('…')` calls (no whitespace-then-clause — that is the static form above). Template-literal handling as in REQUIRE_RE. */
+const DYNAMIC_IMPORT_RE = /\bimport\s*\(\s*(?:['"]([^'"]+)['"]|`([^`$]*)[^`]*`)\s*\)/g;
+
+/**
+ * True when `specifier` resolves inside the repository: a relative specifier
+ * (`./`, `../`), a root alias (`@/`, `~/`), or a first path segment naming a
+ * top-level directory present in the fileset (which catches
+ * tsconfig-`baseUrl`-style specifiers such as `lib/db`). Bare npm specifiers
+ * are deliberately OUT of this class: `node_modules` is outside the evidence
+ * universe (never collected, never surfaced), so a package-mediated
+ * side-effect path is bounded residue this guard does not claim to cover.
+ */
+function isLocalSpecifier(specifier: string, topLevelDirs: ReadonlySet<string>): boolean {
+  if (specifier.startsWith('./') || specifier.startsWith('../')) return true;
+  if (specifier.startsWith('@/') || specifier.startsWith('~/')) return true;
+  const first = specifier.split('/')[0] ?? '';
+  return topLevelDirs.has(first);
+}
+
+/**
+ * The delegated-opacity guard's predicate (H-001): does this handler's FULL
+ * RAW CONTENT carry at least one LOCAL RUNTIME import?
+ *
+ * Counted forms: `import … from`, `export … from`, `require(…)`, and dynamic
+ * `import(…)` — with quoted OR template-literal specifiers; an interpolated
+ * template literal is classified by its static prefix (see REQUIRE_RE).
+ * `import type` / `export type` statements are EXCLUDED — a type-only import
+ * carries no runtime code, and excluding it keeps the inferred `fail` alive
+ * where it is sound. Out of class, in the unsafe direction and disclosed as
+ * bounded residue: bare npm specifiers (node_modules is outside the evidence
+ * universe), `#imports` subpath specifiers, and custom tsconfig aliases
+ * (`@lib/*`-style) that are local in fact but not in this class.
+ *
+ * Why this exists: the delegated surface's `selects` predicate is an
+ * allowlist of POSITIVE markers, so a local helper that is idempotent by
+ * construction (a plain state-reconciliation UPDATE, no event-id / upsert /
+ * dedup marker) is exactly the file it excludes — and when nothing matches,
+ * `elided` is 0, so no completeness disclosure transmits either. A handler
+ * that imports local runtime code can therefore delegate its side-effect path
+ * to a module the model was never shown, and a `fail` judged over that
+ * surface can be a false blocker on a correct repository.
+ *
+ * RECALL COST, stated plainly: the online inferred-fail blocker is now
+ * reachable only on handlers whose side-effect path is inline (no local
+ * runtime imports) — per this module's own contract, a heuristic may
+ * under-warn; it must never manufacture a false blocker.
+ */
+function hasLocalRuntimeImport(content: string, topLevelDirs: ReadonlySet<string>): boolean {
+  for (const m of content.matchAll(IMPORT_EXPORT_FROM_RE)) {
+    if (m[2] !== undefined) continue; // `import type` / `export type` — no runtime code.
+    if (isLocalSpecifier(m[3] ?? '', topLevelDirs)) return true;
+  }
+  for (const re of [REQUIRE_RE, DYNAMIC_IMPORT_RE]) {
+    for (const m of content.matchAll(re)) {
+      // Group 1: quoted specifier. Group 2: template-literal static prefix
+      // (whole specifier when uninterpolated).
+      if (isLocalSpecifier(m[1] ?? m[2] ?? '', topLevelDirs)) return true;
+    }
+  }
+  return false;
+}
+
 /** How many non-handler source files carrying an idempotency signal are surfaced. */
 const MAX_DELEGATED_EXCERPTS = 5;
 const WINDOW_BEFORE = 10;
@@ -140,6 +220,18 @@ export interface Lg005Applicable {
   applicable: true;
   /** Every located webhook handler, in the shared locator's deterministic order. */
   handlerPaths: string[];
+  /**
+   * Paths of located handlers whose full raw content carries at least one
+   * LOCAL RUNTIME import — the delegated-opacity guard's input (H-001), a
+   * subset of {@link handlerPaths} in the same deterministic order. When
+   * non-empty, `interpretLg005` demotes a model `fail` to `unknown`: the
+   * handler may delegate its side-effect path to a local module that the
+   * marker-based `selects` predicate excluded, so the model cannot have been
+   * shown the code that distinguishes a safe delegate from one that repeats
+   * side effects on every delivery. See {@link hasLocalRuntimeImport} for the
+   * predicate and the recall cost.
+   */
+  handlersWithLocalRuntimeImports: string[];
   /** The bounded request for the model layer (excerpts already redacted). */
   request: InferenceRequest;
   /** A single-line anchor per located handler; the first is the finding anchor. */
@@ -240,7 +332,26 @@ export function surfaceLg005Candidates(fileset: Fileset): Lg005Candidates {
     supportingFacts: [],
   };
 
-  return { applicable: true, handlerPaths: handlers.map((h) => h.path), request, anchors };
+  // Delegated-opacity guard input (H-001), computed here because this is
+  // where the handlers' full raw content lives. Top-level directory names are
+  // derived from the fileset so a baseUrl-style specifier (`lib/db`) is
+  // recognised as local.
+  const topLevelDirs = new Set<string>();
+  for (const f of fileset.files) {
+    const slash = f.path.indexOf('/');
+    if (slash > 0) topLevelDirs.add(f.path.slice(0, slash));
+  }
+  const handlersWithLocalRuntimeImports = handlers
+    .filter((h) => hasLocalRuntimeImport(h.content, topLevelDirs))
+    .map((h) => h.path);
+
+  return {
+    applicable: true,
+    handlerPaths: handlers.map((h) => h.path),
+    handlersWithLocalRuntimeImports,
+    request,
+    anchors,
+  };
 }
 
 /**
@@ -287,6 +398,32 @@ export function interpretLg005(candidates: Lg005Candidates, judgment?: Inference
         outcome: 'unknown',
         summary: `Model layer returned no usable cited evidence (${contract.reason}); webhook idempotency is left unverified.`,
         evidence: [],
+      }),
+    ];
+  }
+
+  // The delegated-opacity guard (H-001) — asymmetric by design, judgment
+  // branch only, `fail` only. A handler carrying a local runtime import may
+  // delegate its side-effect path to a module the marker-based surface never
+  // showed the model (a helper idempotent by construction carries no marker
+  // at all, and with zero matches no elision disclosure transmits either), so
+  // a `fail` judged over that surface cannot be trusted. A `pass` is
+  // unaffected: an opaque surface cannot invent a guard. The offline branch
+  // above is untouched — this runs only when a judgment exists.
+  const opaque = candidates.handlersWithLocalRuntimeImports;
+  if (contract.finding.outcome === 'fail' && opaque.length > 0) {
+    return [
+      makeFinding({
+        checkId: 'LG-005',
+        seq: 1,
+        outcome: 'unknown',
+        summary:
+          `Webhook idempotency could not be judged from the surfaced code: ${opaque.length} of ` +
+          `${candidates.handlerPaths.length} located handler(s) carry local runtime imports ` +
+          `(${opaque.join(', ')}), so the side-effect path may live in a local module the marker-based ` +
+          'surface did not show the model. Reported unknown rather than failed, because a delegated helper ' +
+          'that is idempotent by construction carries no dedup marker and is exactly what the surface excludes.',
+        evidence: contract.finding.evidence,
       }),
     ];
   }
