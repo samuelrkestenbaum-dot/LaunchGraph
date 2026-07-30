@@ -478,6 +478,31 @@ describe('H-001 — the delegated-opacity guard (asymmetric; judgment branch onl
     expect(finding?.outcome).toBe('unknown');
   });
 
+  it('a side-effect-only LOCAL import (no `from` clause) arms the guard', async () => {
+    // `import './register-handlers'` is module-registration delegation: the
+    // imported module can install the very callback the handler later invokes,
+    // and the model never sees it. Codex re-review finding on PR #1.
+    const { fileset } = makeRepo({
+      'app/api/stripe/webhook/route.ts': `import '../../../../lib/register-handlers';\n${HANDLER_NO_GUARD}`,
+      'lib/register-handlers.ts': RECONCILING_HELPER,
+    });
+    const candidates = surfaceLg005Candidates(fileset) as Lg005Applicable;
+    const [finding] = interpretLg005(candidates, await judge(candidates, 'fail', 0.85));
+    expect(finding?.outcome).toBe('unknown');
+  });
+
+  it('a side-effect-only import of a BARE specifier does NOT arm the guard (`import "server-only"`)', async () => {
+    // `import 'server-only'` is idiomatic Next.js and names an npm package —
+    // out of class by the node_modules boundary, so fail must stay alive.
+    const { fileset } = makeRepo({
+      'app/api/stripe/webhook/route.ts': `import 'server-only';\n${HANDLER_NO_GUARD}`,
+    });
+    const candidates = surfaceLg005Candidates(fileset) as Lg005Applicable;
+    const [finding] = interpretLg005(candidates, await judge(candidates, 'fail', 0.85));
+    expect(finding?.outcome).toBe('fail');
+    expect(finding?.classification).toBe('inferred');
+  });
+
   it('a template-literal dynamic import of a BARE npm specifier does NOT arm the guard', async () => {
     // Same out-of-class rule as quoted bare specifiers: node_modules is
     // outside the evidence universe. Interpolated or not, an `stripe`-prefixed

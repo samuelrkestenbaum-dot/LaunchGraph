@@ -114,6 +114,16 @@ const IMPORT_EXPORT_FROM_RE = /\b(import|export)\s+(type\s+)?[^'"]*?\bfrom\s*['"
 const REQUIRE_RE = /\brequire\s*\(\s*(?:['"]([^'"]+)['"]|`([^`$]*)[^`]*`)\s*\)/g;
 /** Dynamic `import('…')` calls (no whitespace-then-clause — that is the static form above). Template-literal handling as in REQUIRE_RE. */
 const DYNAMIC_IMPORT_RE = /\bimport\s*\(\s*(?:['"]([^'"]+)['"]|`([^`$]*)[^`]*`)\s*\)/g;
+/**
+ * Side-effect-only imports: `import './register-handlers'` — no `from`
+ * clause, no binding. Module-registration delegation: the imported module can
+ * install the very callback the handler later invokes, so it is the same
+ * opacity class as the clause forms above. Static import declarations accept
+ * only string literals, so no template-literal alternative exists here. The
+ * quote follows `import` directly, which is what keeps this from overlapping
+ * the `from`-clause form.
+ */
+const SIDE_EFFECT_IMPORT_RE = /\bimport\s*['"]([^'"]+)['"]/g;
 
 /**
  * True when `specifier` resolves inside the repository: a relative specifier
@@ -135,7 +145,8 @@ function isLocalSpecifier(specifier: string, topLevelDirs: ReadonlySet<string>):
  * The delegated-opacity guard's predicate (H-001): does this handler's FULL
  * RAW CONTENT carry at least one LOCAL RUNTIME import?
  *
- * Counted forms: `import … from`, `export … from`, `require(…)`, and dynamic
+ * Counted forms: `import … from`, `export … from`, side-effect-only
+ * `import '…'`, `require(…)`, and dynamic
  * `import(…)` — with quoted OR template-literal specifiers; an interpolated
  * template literal is classified by its static prefix (see REQUIRE_RE).
  * `import type` / `export type` statements are EXCLUDED — a type-only import
@@ -164,7 +175,7 @@ function hasLocalRuntimeImport(content: string, topLevelDirs: ReadonlySet<string
     if (m[2] !== undefined) continue; // `import type` / `export type` — no runtime code.
     if (isLocalSpecifier(m[3] ?? '', topLevelDirs)) return true;
   }
-  for (const re of [REQUIRE_RE, DYNAMIC_IMPORT_RE]) {
+  for (const re of [REQUIRE_RE, DYNAMIC_IMPORT_RE, SIDE_EFFECT_IMPORT_RE]) {
     for (const m of content.matchAll(re)) {
       // Group 1: quoted specifier. Group 2: template-literal static prefix
       // (whole specifier when uninterpolated).
