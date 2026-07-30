@@ -104,8 +104,55 @@ describe('inference D→M contract — classification', () => {
     expect(out.kind).toBe('finding');
     if (out.kind === 'finding') {
       expect(out.finding.classification).toBe('contradictory');
+      // C1: the outcome is forced to `fail` even though the model said `pass`.
+      // §7 rule 5 filters on `outcome === 'fail' && classification ===
+      // 'contradictory'`, so a contradictory PASS would otherwise fire no rule
+      // at all and render as "LG-006: pass" on a repo the deterministic layer
+      // says is broken.
+      expect(out.finding.outcome).toBe('fail');
       expect(out.finding.confidence).toBeLessThanOrEqual(0.9);
       expect(out.contradictedFact?.id).toBe('fact:x');
+    }
+  });
+
+  it('does NOT consult outcomeForVerdict for a contradictory judgment', () => {
+    const consulted: Array<'fail' | 'pass'> = [];
+    const spyPres: InferencePresentation = {
+      ...PRES,
+      outcomeForVerdict: (v) => {
+        consulted.push(v);
+        return v === 'fail' ? 'fail' : 'pass';
+      },
+    };
+    const out = runInferenceContract(
+      req({ supportingFacts: [{ id: 'fact:x', statement: '…', establishesVerdict: 'fail' }] }),
+      res({ answer: { verdict: 'pass', rationale: 'r' }, citedEvidence: [{ path: 'h.ts', startLine: 5 }] }),
+      spyPres,
+    );
+    expect(consulted).toEqual([]);
+    expect(out.kind).toBe('finding');
+    if (out.kind === 'finding') expect(out.finding.outcome).toBe('fail');
+  });
+
+  it('still consults outcomeForVerdict for a NON-contradictory judgment', () => {
+    const consulted: Array<'fail' | 'pass'> = [];
+    const spyPres: InferencePresentation = {
+      ...PRES,
+      outcomeForVerdict: (v) => {
+        consulted.push(v);
+        return v === 'fail' ? 'fail' : 'pass';
+      },
+    };
+    const out = runInferenceContract(
+      req(),
+      res({ answer: { verdict: 'pass', rationale: 'r' } }),
+      spyPres,
+    );
+    expect(consulted).toEqual(['pass']);
+    expect(out.kind).toBe('finding');
+    if (out.kind === 'finding') {
+      expect(out.finding.classification).toBe('inferred');
+      expect(out.finding.outcome).toBe('pass');
     }
   });
 

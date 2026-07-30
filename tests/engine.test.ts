@@ -95,6 +95,29 @@ describe('decision engine — rule 5 (contradictory on blocker-capable checks)',
     expect(result.counts).toEqual({ blockers: 0, warnings: 1, unknowns: 0 });
   });
 
+  it('DC-5: a contradictory blocker-capable fail can NEVER produce not_ready, at any confidence', () => {
+    // Rule 2 requires `confirmed`, rule 3 requires `inferred`, and rule 5
+    // reclassifies contradictory to `requires_confirmation` — so forcing
+    // contradictory judgments to outcome `fail` (C1) cannot manufacture a
+    // blocker. Asserted, not argued.
+    for (const confidence of [0, 0.5, 0.69, 0.7, 0.85, 0.9]) {
+      const contradictory = makeFinding({
+        id: 'LG-006-001',
+        checkId: 'LG-006',
+        title: 'Missing cancellation handling',
+        classification: 'contradictory',
+        confidence,
+      });
+      const result = decide({ findings: [contradictory], stackSupported: true });
+      expect(result.value, `confidence ${confidence}`).not.toBe('not_ready');
+      expect(result.value, `confidence ${confidence}`).toBe('ready_with_warnings');
+      expect(result.findings[0]?.classification, `confidence ${confidence}`).toBe('requires_confirmation');
+      expect(result.counts.blockers, `confidence ${confidence}`).toBe(0);
+      expect(result.counts.warnings, `confidence ${confidence}`).toBe(1);
+      expect(result.reasons.some((r) => r.startsWith('Rule 5:')), `confidence ${confidence}`).toBe(true);
+    }
+  });
+
   it('leaves contradictory findings on warning-ceiling checks unreclassified', () => {
     const contradictory = makeFinding({
       id: 'LG-010-001',

@@ -1,0 +1,49 @@
+{
+  "runtime_version": "1.0.0",
+  "source_sha": "0a63f668aab1fd994a8448834dec50175272405e",
+  "source_repo": "ClaudeOrchestrator",
+  "installed_at": "2026-07-27T12:31:40+00:00",
+  "agents": [
+    "archivist",
+    "build-orchestrator",
+    "builder",
+    "qa",
+    "reviewer"
+  ],
+  "tools": [
+    "capability-profile.sh",
+    "project-bootstrap.sh",
+    "skill-budget-audit.sh",
+    "specialist-handoff.sh",
+    "supervise.sh"
+  ],
+  "files": {
+    ".claude/agents/archivist.md": "051992883a6c499ca76bc05790cbed49bfadadfe3a82ab545571243fe69f4513",
+    ".claude/agents/build-orchestrator.md": "33fdb329e9be5f62d9a496f1be6f0117f313e1153fe0d4c53b56cf72121b74cd",
+    ".claude/agents/builder.md": "cccaf1f0a4abccbf8df8c2d4073fa9c581b626c60e531f963d838ad62638be30",
+    ".claude/agents/qa.md": "3f46f032ec18dae10351cc9da1028def4487ac2609e412feee0e4f694bbf1932",
+    ".claude/agents/reviewer.md": "3ae4914f1c6f71e2f76f95d28331711fd0b664035f8ad524e10e00b30d2eac8b",
+    ".claude/commands/capability-profile.md": "a32911618d78f81ac9ec244e7b6bec94ab09c9f256d2226240a7c41582f72917",
+    ".claude/commands/close-packet.md": "e830bf0b40ec0bb6031920fb6d1e73dcc793584111269a191841588bdb6ad87f",
+    ".claude/commands/next-packet.md": "bcb2a276fb5dc9027333043523d1d76a62bcfc3108194531785efd8e97540bfe",
+    ".claude/commands/review-packet.md": "25884edd671f7de133281839ec48234136e7e723c2daf674228976cd5a17ff2c",
+    ".claude/hooks/hook-once.sh": "8377a2bc0ecbd8e2d4c156c7ed77782ddb4d226402f8890a163177ee00f5bdae",
+    ".claude/hooks/prompt-router.sh": "580e59ca90fd4abedf35467cde1630288d37d9d6afe50406936dae045703abaf",
+    ".claude/hooks/session-start-build-os.sh": "04d0234a944d1f0f34f8b45a5ae626d0a9c7dfcceebeda7a5d1567f08fce27a5",
+    "build-os/tools/capability-profile.sh": "a6bab63ae4d94bce6937c3d1e46e1af842c9aaae714567f102360aa3cdee2dda",
+    "build-os/tools/project-bootstrap.sh": "20f0a1d9ea49c19c869468ce46c22035ba1df76c27ec27d90931c2e67c5168af",
+    "build-os/tools/skill-budget-audit.sh": "5bcb1a19c5c233ef0e25d693158ae05435025336038e43b0c9083291ad6c81c4",
+    "build-os/tools/specialist-handoff.sh": "9e8db861d3edd0c3aefaef8689c00e8907b386b974a1f960118ac83378def0a8",
+    "build-os/tools/supervise.sh": "c1cc097ff35bcfdb6001ee47ea16be9739865b624f3218d3d192d16950640520",
+    "build-os/memory/tool_router.md": "899822bcc96376e975df5c9e1835a70e34ff051f32628960e238bce422732f72",
+    "build-os/memory/skill_budget.md": "46179e40c8d7a79beedb6c4383263b4575ef30b796d3b690a94a43d9d4a356f4",
+    "build-os/global-claude-md.md": "8af4d7950e12f17efe757aa9f435bcd6f2da87df5b58be6f1f7961e4f042d8d2"
+  },
+  "preserved": [
+    "build-os/memory/current_state.md",
+    "build-os/memory/residue.md",
+    "build-os/packets/active_packet.md",
+    "build-os/receipts/README.md"
+  ],
+  "note": "files = sha256 of the MANAGED installation. preserved = project-specific files intentionally left untouched."
+}

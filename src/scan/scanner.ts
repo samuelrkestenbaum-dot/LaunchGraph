@@ -37,7 +37,10 @@ import { detectLg008 } from '../checks/lg008.js';
 import { detectLg010 } from '../checks/lg010.js';
 import { detectLg014 } from '../checks/lg014.js';
 import { detectLg015 } from '../checks/lg015.js';
-import { interpretLg006, surfaceLg006Candidates } from '../checks/lg006.js';
+import { lg005ModelCheck } from '../checks/lg005.js';
+import { lg006ModelCheck } from '../checks/lg006.js';
+import { lg009ModelCheck } from '../checks/lg009.js';
+import type { ModelCheck } from '../model/modelCheck.js';
 import { basename } from '../checks/detectorKit.js';
 import type { ModelClient } from '../model/client.js';
 import { collect } from './collect.js';
@@ -143,6 +146,19 @@ function detectStack(fileset: Fileset): StackDetection {
   return { supported, stack, facts };
 }
 
+/**
+ * The model-assisted (Layer D+M) checks, in a FIXED, APPEND-ONLY order.
+ *
+ * Append-only matters: the order is observable through `model.requests`, so
+ * reordering silently invalidates positional assertions and breaks AT-23
+ * comparability against previously published tables. New checks go on the end.
+ *
+ * Both scanner paths iterate this same array, which is what keeps a detector
+ * from being wired into one path and not the other — the defect class AT-27
+ * exists to catch.
+ */
+const MODEL_CHECKS: readonly ModelCheck[] = [lg006ModelCheck, lg005ModelCheck, lg009ModelCheck];
+
 /** The eight deterministic (Layer D) detectors, in fixed order. */
 function deterministicFindings(fileset: Fileset): Finding[] {
   return [
@@ -196,9 +212,12 @@ function assembleReport(
 /**
  * Builds a synchronous `ScannerFn`. Wiring, not logic: it never invents findings
  * or decisions — detectors and `decide` do that. LG-006 runs its deterministic
- * Layer-D surface and, with NO model judgment available in this path, emits
- * `unknown` ("model layer disabled") when a webhook handler exists (or
- * `not_applicable` when none does). This IS the --offline / model-unconfigured /
+ * Layer-D surface and, with NO model judgment available in this path, resolves
+ * its §3 disjunction: `not_applicable` when no webhook handler exists, a
+ * deterministic `fail` when a handler exists but nothing in the repository
+ * handles subscription cancellation, and `unknown` ("model layer disabled")
+ * when cancellation IS handled but confirming that it reaches an entitlement
+ * downgrade needs the model layer. This IS the --offline / model-unconfigured /
  * AT-27 behavior; the sync path stays synchronous and calls no model.
  */
 export function createScanner(options: ScannerOptions = {}): (fixtureDir: string) => Report {
@@ -207,7 +226,13 @@ export function createScanner(options: ScannerOptions = {}): (fixtureDir: string
   return (fixtureDir: string): Report => {
     const fileset = collect(fixtureDir);
     const { supported, stack, facts } = detectStack(fileset);
-    const rawFindings = [...deterministicFindings(fileset), ...interpretLg006(surfaceLg006Candidates(fileset))];
+    // No model in this path, so every model check interprets with no judgment:
+    // settled checks emit their deterministic finding, the rest emit `unknown`
+    // ("model layer disabled", AT-27).
+    const rawFindings = [
+      ...deterministicFindings(fileset),
+      ...MODEL_CHECKS.flatMap((check) => check.surface(fileset).interpret()),
+    ];
     return assembleReport(fileset, stack, facts, supported, rawFindings, now, checks);
   };
 }
@@ -226,11 +251,30 @@ export async function scanWithModel(dir: string, model: ModelClient, options: Sc
   const checks = options.checks;
   const fileset = collect(dir);
   const { supported, stack, facts } = detectStack(fileset);
-  const candidates = surfaceLg006Candidates(fileset);
-  const lg006Findings = candidates.applicable
-    ? interpretLg006(candidates, await model.infer(candidates.request))
-    : interpretLg006(candidates);
-  const rawFindings = [...deterministicFindings(fileset), ...lg006Findings];
+  // §11 `--checks`: a check excluded from the run must not ship repository text
+  // off-process. `assembleReport` filters excluded findings out of the decision
+  // anyway, so calling the model for one would leak a prompt to produce a
+  // finding that is then discarded. This is a security property, not a
+  // convenience, and the loop makes it structural rather than per-check.
+  const selected = (checkId: string): boolean => checks === undefined || checks.includes(checkId);
+
+  // Model calls are SEQUENTIAL and in the fixed `MODEL_CHECKS` order — never
+  // `Promise.all`, whose rejection ordering is nondeterministic and would put
+  // AT-23 at risk for a latency saving AT-28's <5-minute budget does not need.
+  //
+  // A check whose deterministic layer has settled the question exposes NO
+  // request, so it is never asked: no round-trip, no repository text leaving
+  // the process, and no judgment in a position to override a required
+  // deterministic signal (§4.1/§4.3).
+  const modelFindings: Finding[] = [];
+  for (const check of MODEL_CHECKS) {
+    const surfaced = check.surface(fileset);
+    const request = surfaced.request;
+    const judgment = request !== undefined && selected(check.checkId) ? await model.infer(request) : undefined;
+    modelFindings.push(...surfaced.interpret(judgment));
+  }
+
+  const rawFindings = [...deterministicFindings(fileset), ...modelFindings];
   return assembleReport(fileset, stack, facts, supported, rawFindings, now, checks);
 }
 
